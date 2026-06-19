@@ -58,14 +58,14 @@ Assets/
 - Canvas Screen Space Overlay, fond noir semi-transparent (TMP)
 - EconomySystem et TimeManager en singleton avec API publique
 
-### Étape 1E — Menu de construction complet ✅ `v0.5.0`
+### Étape 1E — Menu de construction complet ✅ `v0.6.0`
 - 4 bâtiments : Runway, Terminal, Gate, Control Tower (prefabs cubes colorés)
 - Menu en bas d'écran : icône couleur, nom, coût doré par bâtiment
 - Onglets : Tous | Pistes | Terminaux | Services (filtre par catégorie)
 - Bouton grisé si budget insuffisant, surligné si sélectionné
 - Échap pour désélectionner · DOTween slide-from-bottom + punch au clic
 
-### Étape 1D — Premier bâtiment placeable ✅ `v0.4.0`
+### Étape 1D — Premier bâtiment placeable ✅ `v0.5.0`
 - `BuildingData` ScriptableObject (nom, coût, taille, prefab, catégorie, type grille)
 - Bâtiment de test : Runway 8×2 cellules, 80 000 $, cube gris allongé
 - Ghost 3D suit la souris : vert = valide, rouge = invalide ou budget insuffisant
