@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using TMPro;
@@ -124,6 +126,8 @@ public static class AirportSceneSetup
         scaler.referenceResolution = new Vector2(1920, 1080);
         scaler.matchWidthOrHeight = 0.5f;
         canvasGo.AddComponent<GraphicRaycaster>();
+
+        EnsureEventSystem();
 
         var hud = canvasGo.AddComponent<HUDController>();
 
@@ -470,6 +474,16 @@ public static class AirportSceneSetup
         mat.SetColor("_BaseColor", color);
         AssetDatabase.CreateAsset(mat, path);
         return mat;
+    }
+
+    private static void EnsureEventSystem()
+    {
+        if (Object.FindAnyObjectByType<EventSystem>() != null) return;
+
+        var go = new GameObject("Event System");
+        go.AddComponent<EventSystem>();
+        go.AddComponent<InputSystemUIInputModule>();
+        Debug.Log("[AirportSim] EventSystem ajouté (InputSystemUIInputModule).");
     }
 
     private static void EnsureFolder(string parent, string name)
