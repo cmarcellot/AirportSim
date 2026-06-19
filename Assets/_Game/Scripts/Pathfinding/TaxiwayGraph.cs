@@ -94,6 +94,9 @@ public class TaxiwayGraph : MonoBehaviour
         }
 
         _lastNodeCount = _nodes.Count;
+
+        // Chemin de debug automatique entre le premier et le dernier nœud
+        AutoComputeDebugPath();
     }
 
     public List<Vector3> FindPath(Vector3 start, Vector3 end)
@@ -164,6 +167,26 @@ public class TaxiwayGraph : MonoBehaviour
         _debugPath = FindPath(debugStartPos, debugEndPos);
         Debug.Log($"[TaxiwayGraph] Chemin : {_debugPath.Count} nœuds " +
                   (_debugPath.Count == 0 ? "(aucun chemin trouvé)" : "trouvé"));
+    }
+
+    // Sélectionne automatiquement deux nœuds distants et calcule le chemin
+    private void AutoComputeDebugPath()
+    {
+        if (_nodes.Count < 2) { _debugPath = new List<Vector3>(); return; }
+
+        var list = new List<Node>(_nodes.Values);
+
+        // Extrémités : nœud le plus au sud-ouest et nœud le plus au nord-est
+        Node start = list[0], end = list[0];
+        foreach (var n in list)
+        {
+            if (n.Cell.x + n.Cell.y < start.Cell.x + start.Cell.y) start = n;
+            if (n.Cell.x + n.Cell.y > end.Cell.x   + end.Cell.y)   end   = n;
+        }
+
+        debugStartPos = start.WorldPos;
+        debugEndPos   = end.WorldPos;
+        _debugPath    = FindPath(debugStartPos, debugEndPos);
     }
 
     // ── Gizmos (éditeur uniquement) ────────────────────────────────────────
