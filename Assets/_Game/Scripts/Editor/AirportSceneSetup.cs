@@ -358,6 +358,7 @@ public static class AirportSceneSetup
         scaler.referenceResolution = new Vector2(1920, 1080);
         scaler.matchWidthOrHeight  = 0.5f;
         canvasGo.AddComponent<GraphicRaycaster>();
+        EnsureEventSystem();
 
         // Panel (barre du bas)
         var panelGo = new GameObject("MenuPanel", typeof(RectTransform));
