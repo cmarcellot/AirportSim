@@ -38,19 +38,19 @@ Assets/
 - Rotation Q/E par paliers de 45° fluide (DOTween)
 - Paramètres exposés dans l'Inspector via Odin (FoldoutGroup)
 
-### Étape 1C — HUD minimal ✅ `v0.3.0`
-- Budget affiché en haut à gauche : `1 000 000 $`
-- Horloge fictive en haut au centre : `06:00  x1`
-- Touche T pour cycler la vitesse x1 / x2 / x4
-- Canvas Screen Space Overlay, fond noir semi-transparent (TMP)
-- EconomySystem et TimeManager en singleton avec API publique
-
 ### Étape 1B — Grille au sol ✅ `v0.2.0`
 - Grille 128×128 cellules de 4×4 unités (carte 512×512)
 - Rendu GL.Lines visible en jeu, couleur blanche semi-transparente
 - État par cellule : `Empty` / `Occupied` + enum `BuildingType`
 - API publique : `GetCellFromWorldPos`, `IsCellAvailable`, `SetCellOccupied`
 - Statistiques temps réel dans l'Inspector (Odin ShowInInspector)
+
+### Étape 1C — HUD minimal ✅ `v0.3.0`
+- Budget affiché en haut à gauche : `1 000 000 $`
+- Horloge fictive en haut au centre : `06:00  x1`
+- Touche T pour cycler la vitesse x1 / x2 / x4
+- Canvas Screen Space Overlay, fond noir semi-transparent (TMP)
+- EconomySystem et TimeManager en singleton avec API publique
 
 ## Lancer le projet
 
