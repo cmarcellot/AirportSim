@@ -60,11 +60,17 @@ Assets/
 4. Sauvegarder (`Ctrl+S`)
 5. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
-## Contrôles caméra
+## Contrôles
 
+### Caméra
 | Action | Touche |
 |--------|--------|
 | Déplacement | WASD ou flèches |
 | Rotation gauche | Q |
 | Rotation droite | E |
 | Zoom | Molette souris |
+
+### Jeu
+| Action | Touche |
+|--------|--------|
+| Cycler vitesse (x1 / x2 / x4) | T |
