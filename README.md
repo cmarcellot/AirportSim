@@ -51,19 +51,19 @@ Assets/
 - API publique : `GetCellFromWorldPos`, `IsCellAvailable`, `SetCellOccupied`
 - Statistiques temps réel dans l'Inspector (Odin ShowInInspector)
 
-### Étape 1D — Premier bâtiment placeable ✅ `v0.4.0`
-- `BuildingData` ScriptableObject (nom, coût, taille, prefab, catégorie, type grille)
-- Bâtiment de test : Runway 8×2 cellules, 80 000 $, cube gris allongé
-- Ghost 3D suit la souris : vert = valide, rouge = invalide ou budget insuffisant
-- Clic gauche = placer et déduire le coût · Clic droit = annuler
-- Utilise `GridSystem.IsCellAvailable` + `EconomySystem.TrySpend`
-
 ### Étape 1C — HUD minimal ✅ `v0.3.0`
 - Budget affiché en haut à gauche : `1 000 000 $`
 - Horloge fictive en haut au centre : `06:00  x1`
 - Touche T pour cycler la vitesse x1 / x2 / x4
 - Canvas Screen Space Overlay, fond noir semi-transparent (TMP)
 - EconomySystem et TimeManager en singleton avec API publique
+
+### Étape 1D — Premier bâtiment placeable ✅ `v0.4.0`
+- `BuildingData` ScriptableObject (nom, coût, taille, prefab, catégorie, type grille)
+- Bâtiment de test : Runway 8×2 cellules, 80 000 $, cube gris allongé
+- Ghost 3D suit la souris : vert = valide, rouge = invalide ou budget insuffisant
+- Clic gauche = placer et déduire le coût · Clic droit = annuler
+- Utilise `GridSystem.IsCellAvailable` + `EconomySystem.TrySpend`
 
 ## Lancer le projet
 
