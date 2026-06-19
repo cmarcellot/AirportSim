@@ -10,13 +10,18 @@ using Sirenix.OdinInspector;
 public class BuildMenuController : MonoBehaviour
 {
     // ── Tab definitions ────────────────────────────────────────────────────
-    private static readonly string[] TabNames = { "Tous", "Pistes", "Terminaux", "Services" };
+    private static readonly string[] TabNames = { "Tous", "Piste", "Terminal", "Accès" };
     private static readonly BuildingCategory[][] TabFilters =
     {
         null,
-        new[] { BuildingCategory.Runway },
-        new[] { BuildingCategory.Terminal, BuildingCategory.Gate },
-        new[] { BuildingCategory.Service },
+        new[] { BuildingCategory.Runway, BuildingCategory.Taxiway, BuildingCategory.Gate,
+                BuildingCategory.Apron,  BuildingCategory.ControlTower,
+                BuildingCategory.FuelStation, BuildingCategory.CargoArea },
+        new[] { BuildingCategory.Terminal, BuildingCategory.Hall, BuildingCategory.CheckIn,
+                BuildingCategory.SecurityCheckpoint, BuildingCategory.Customs,
+                BuildingCategory.BoardingLounge, BuildingCategory.Shop, BuildingCategory.Restaurant },
+        new[] { BuildingCategory.Parking, BuildingCategory.RoadAccess,
+                BuildingCategory.BusStop, BuildingCategory.TaxiZone },
     };
 
     // ── Serialized ─────────────────────────────────────────────────────────

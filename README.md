@@ -80,6 +80,17 @@ Assets/
 - Gizmos éditeur : nœuds verts, connexions blanches, chemin debug jaune
 - Inspector : `NodeCount`, boutons "Rebuild Graph" et "Compute Debug Path"
 
+### Étape 2A v2 — Zones & Pathfinding dual ✅ `v0.8.0`
+- 15 bâtiments (6 Piste · 6 Terminal · 3 Accès) avec préfabs cubes colorés
+- Menu de construction mis à jour : onglets **Tous / Piste / Terminal / Accès**
+- `ZoneSystem` : classification Airside / Landside / Restricted par cellule, visualisation Gizmos colorés (bouton Toggle dans l'Inspector)
+- `PathfindingSystem` : deux graphes A* indépendants
+  - **AirsideGraph** : Runway, Taxiway, Apron, Gate, FuelStation, CargoArea
+  - **LandsideGraph** : Terminal, Hall, CheckIn, Security, Shop, Restaurant, Parking, RoadAccess, BusStop, TaxiZone
+- API : `FindAirsidePath(Vector3, Vector3)` et `FindLandsidePath(Vector3, Vector3)`
+- Rebuild automatique toutes les 0,5 s si la grille change
+- Gizmos : nœuds bleus (airside) / verts (landside), chemin debug jaune / orange
+
 ## Lancer le projet
 
 1. Ouvrir le projet dans Unity 6

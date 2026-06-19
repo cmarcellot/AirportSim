@@ -1,7 +1,27 @@
 public enum BuildingCategory
 {
+    // ── Airside (côté piste) ──────────────────────────────────────────────
     Runway,
-    Terminal,
+    Taxiway,
     Gate,
-    Service
+    Apron,
+    ControlTower,
+    FuelStation,
+    CargoArea,
+
+    // ── Landside (côté terminal) ──────────────────────────────────────────
+    Terminal,
+    Hall,
+    CheckIn,
+    SecurityCheckpoint,
+    Customs,
+    BoardingLounge,
+    Shop,
+    Restaurant,
+
+    // ── Accès ─────────────────────────────────────────────────────────────
+    Parking,
+    RoadAccess,
+    BusStop,
+    TaxiZone,
 }

@@ -213,78 +213,105 @@ public static class AirportSceneSetup
 
     // ── Étape 1D ──────────────────────────────────────────────────────────────
 
-    [MenuItem("AirportSim/Setup 2A - Pathfinding", true)]
+    [MenuItem("AirportSim/Setup 2A - Zones & Pathfinding", true)]
     public static bool Setup2AValidate() => !Application.isPlaying;
 
-    [MenuItem("AirportSim/Setup 2A - Pathfinding")]
+    [MenuItem("AirportSim/Setup 2A - Zones & Pathfinding")]
     public static void Setup2A()
     {
-        EnsureFolder("Assets/_Game/Prefabs",         "Buildings");
-        EnsureFolder("Assets/_Game/ScriptableObjects","Buildings");
+        EnsureFolder("Assets/_Game/Prefabs",          "Buildings");
+        EnsureFolder("Assets/_Game/ScriptableObjects", "Buildings");
 
-        // ── Matériau taxiway (gris foncé) ─────────────────────────────────
-        var taxiwayMat = CreateOpaqueMat(
-            "Assets/_Game/Materials/TaxiwayMat.mat",
-            new Color(0.22f, 0.22f, 0.22f));
+        // ── Définition complète des bâtiments ─────────────────────────────
+        // (name, category, gridType, cost, sizeX, sizeZ, height, color)
+        var defs = new (string n, BuildingCategory cat, BuildingType type,
+                        float cost, int sx, int sz, float h, Color col)[]
+        {
+            // Piste (Airside)
+            ("Runway",       BuildingCategory.Runway,       BuildingType.Runway,
+              80_000f, 8, 2, 0.3f,  new Color(0.45f, 0.45f, 0.45f)),
+            ("Taxiway",      BuildingCategory.Taxiway,      BuildingType.Taxiway,
+               5_000f, 1, 1, 0.1f,  new Color(0.22f, 0.22f, 0.22f)),
+            ("Apron",        BuildingCategory.Apron,        BuildingType.Apron,
+              20_000f, 2, 2, 0.15f, new Color(0.35f, 0.35f, 0.35f)),
+            ("Gate",         BuildingCategory.Gate,         BuildingType.Gate,
+              30_000f, 2, 2, 1.5f,  new Color(0.20f, 0.45f, 0.85f)),
+            ("FuelStation",  BuildingCategory.FuelStation,  BuildingType.FuelStation,
+              40_000f, 2, 1, 1.5f,  new Color(0.90f, 0.70f, 0.10f)),
+            ("ControlTower", BuildingCategory.ControlTower, BuildingType.ControlTower,
+              50_000f, 1, 1, 4.0f,  new Color(0.85f, 0.20f, 0.20f)),
+
+            // Terminal (Landside)
+            ("Terminal",     BuildingCategory.Terminal,     BuildingType.Terminal,
+             200_000f, 6, 8, 2.0f,  new Color(0.90f, 0.90f, 0.90f)),
+            ("Hall",         BuildingCategory.Hall,         BuildingType.Hall,
+              80_000f, 4, 4, 2.0f,  new Color(0.70f, 0.85f, 1.00f)),
+            ("CheckIn",      BuildingCategory.CheckIn,      BuildingType.CheckIn,
+              25_000f, 3, 2, 1.5f,  new Color(0.30f, 0.80f, 0.70f)),
+            ("Security",     BuildingCategory.SecurityCheckpoint, BuildingType.SecurityCheckpoint,
+              35_000f, 2, 2, 1.5f,  new Color(0.95f, 0.55f, 0.15f)),
+            ("Shop",         BuildingCategory.Shop,         BuildingType.Shop,
+              15_000f, 2, 2, 1.5f,  new Color(0.75f, 0.40f, 0.90f)),
+            ("Restaurant",   BuildingCategory.Restaurant,   BuildingType.Restaurant,
+              20_000f, 3, 2, 1.5f,  new Color(0.90f, 0.35f, 0.45f)),
+
+            // Accès
+            ("Parking",      BuildingCategory.Parking,      BuildingType.Parking,
+              50_000f, 4, 4, 0.15f, new Color(0.25f, 0.30f, 0.35f)),
+            ("RoadAccess",   BuildingCategory.RoadAccess,   BuildingType.RoadAccess,
+               2_000f, 1, 1, 0.15f, new Color(0.30f, 0.30f, 0.30f)),
+            ("BusStop",      BuildingCategory.BusStop,      BuildingType.BusStop,
+              10_000f, 2, 1, 1.5f,  new Color(0.95f, 0.85f, 0.10f)),
+        };
+
+        // ── Création/mise à jour de tous les assets ───────────────────────
+        var allSOs = new BuildingData[defs.Length];
+        for (int i = 0; i < defs.Length; i++)
+        {
+            var d    = defs[i];
+            var mat  = CreateOpaqueMat($"Assets/_Game/Materials/{d.n}Mat.mat", d.col);
+            var pfab = CreateCubePrefab($"Assets/_Game/Prefabs/Buildings/{d.n}.prefab", mat);
+            allSOs[i] = UpsertBuildingData(
+                $"Assets/_Game/ScriptableObjects/Buildings/{d.n}.asset",
+                d.n == "Security" ? "Security" : d.n.Replace("_", " "),
+                d.cat, d.type, d.cost, new Vector2Int(d.sx, d.sz), d.h, pfab, d.col);
+        }
         AssetDatabase.SaveAssets();
 
-        // ── Prefab : cube plat (height contrôlé par BuildingData.height) ──
-        var taxiwayPrefab = CreateCubePrefab(
-            "Assets/_Game/Prefabs/Buildings/Taxiway.prefab", taxiwayMat);
-
-        // ── BuildingData Taxiway ───────────────────────────────────────────
-        var taxiwaySO = UpsertBuildingData(
-            "Assets/_Game/ScriptableObjects/Buildings/Taxiway.asset",
-            "Taxiway", BuildingCategory.Runway, BuildingType.Taxiway,
-            5_000f, new Vector2Int(1, 1), 0.1f, taxiwayPrefab,
-            new Color(0.22f, 0.22f, 0.22f));
-        AssetDatabase.SaveAssets();
-
-        // ── Ajoute Taxiway au menu de construction ─────────────────────────
+        // ── Met à jour la liste complète dans BuildMenuController ─────────
         var menu = Object.FindAnyObjectByType<BuildMenuController>();
         if (menu != null)
         {
-            var menuSO   = new SerializedObject(menu);
-            var listProp = menuSO.FindProperty("availableBuildings");
-
-            // Vérifie que Taxiway n'est pas déjà dans la liste
-            bool alreadyAdded = false;
-            for (int i = 0; i < listProp.arraySize; i++)
-                if (listProp.GetArrayElementAtIndex(i).objectReferenceValue == taxiwaySO)
-                { alreadyAdded = true; break; }
-
-            if (!alreadyAdded)
-            {
-                listProp.arraySize++;
-                listProp.GetArrayElementAtIndex(listProp.arraySize - 1).objectReferenceValue = taxiwaySO;
-                menuSO.ApplyModifiedProperties();
-            }
+            var menuSO = new SerializedObject(menu);
+            var list   = menuSO.FindProperty("availableBuildings");
+            list.arraySize = allSOs.Length;
+            for (int i = 0; i < allSOs.Length; i++)
+                list.GetArrayElementAtIndex(i).objectReferenceValue = allSOs[i];
+            menuSO.ApplyModifiedProperties();
         }
         else
-        {
             Debug.LogWarning("[AirportSim] BuildMenuController introuvable — lance d'abord Setup 1E.");
-        }
 
-        // ── TaxiwayGraph dans la scène ─────────────────────────────────────
-        if (Object.FindAnyObjectByType<TaxiwayGraph>() != null)
-        {
-            EditorUtility.DisplayDialog("AirportSim", "Un TaxiwayGraph existe déjà dans la scène.", "OK");
-            return;
-        }
+        // ── Remplace TaxiwayGraph par ZoneSystem + PathfindingSystem ──────
+        var oldGraph = Object.FindAnyObjectByType<TaxiwayGraph>();
+        if (oldGraph != null) Object.DestroyImmediate(oldGraph.gameObject);
 
-        var graphGo = new GameObject("Taxiway Graph");
-        graphGo.AddComponent<TaxiwayGraph>();
+        if (Object.FindAnyObjectByType<ZoneSystem>() == null)
+            new GameObject("Zone System").AddComponent<ZoneSystem>();
+
+        if (Object.FindAnyObjectByType<PathfindingSystem>() == null)
+            new GameObject("Pathfinding System").AddComponent<PathfindingSystem>();
 
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
         AssetDatabase.Refresh();
 
-        Debug.Log("[AirportSim] Setup 2A terminé — TaxiwayGraph ajouté.");
+        Debug.Log("[AirportSim] Setup 2A terminé — 15 bâtiments, ZoneSystem, PathfindingSystem.");
         EditorUtility.DisplayDialog("AirportSim",
             "Setup 2A terminé !\n\n" +
-            "• Bâtiment Taxiway ajouté au menu (onglet Pistes)\n" +
-            "• TaxiwayGraph ajouté à la scène\n\n" +
-            "En Play : pose des Taxiways, le graphe se reconstruit automatiquement.\n" +
-            "Inspector TaxiwayGraph → Pathfinding Debug → Compute Debug Path pour tester.", "OK");
+            "• 15 bâtiments créés/mis à jour (Piste / Terminal / Accès)\n" +
+            "• ZoneSystem et PathfindingSystem ajoutés\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.\n" +
+            "Pose des bâtiments → graphes reconstruits automatiquement.", "OK");
     }
 
     [MenuItem("AirportSim/Setup 1E - Build Menu", true)]
@@ -423,7 +450,14 @@ public static class AirportSceneSetup
         var existing = AssetDatabase.LoadAssetAtPath<BuildingData>(path);
         if (existing != null)
         {
-            existing.iconColor = iconColor;
+            existing.buildingName = buildingName;
+            existing.category     = category;
+            existing.gridType     = gridType;
+            existing.cost         = cost;
+            existing.sizeInCells  = size;
+            existing.height       = height;
+            if (prefab != null) existing.prefab = prefab;
+            existing.iconColor    = iconColor;
             EditorUtility.SetDirty(existing);
             return existing;
         }

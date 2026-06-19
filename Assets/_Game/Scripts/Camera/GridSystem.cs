@@ -10,7 +10,22 @@ public enum BuildingType
     Taxiway,
     Hangar,
     ControlTower,
-    Parking
+    Parking,
+    // ── Étape 2A ──────────────────────────────────────────────────────────
+    Gate,
+    Apron,
+    FuelStation,
+    CargoArea,
+    Hall,
+    CheckIn,
+    SecurityCheckpoint,
+    Customs,
+    BoardingLounge,
+    Shop,
+    Restaurant,
+    RoadAccess,
+    BusStop,
+    TaxiZone,
 }
 
 public enum CellState
