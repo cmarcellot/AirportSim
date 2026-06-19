@@ -44,6 +44,7 @@ public static class AirportSceneSetup
 
         // Caméra RTS — pitch 45°, Y=40, Z=-40 pour centrer la vue sur l'origine (carte 512×512)
         var cameraGo = new GameObject("RTS Camera");
+        cameraGo.tag = "MainCamera";
         var cam = cameraGo.AddComponent<Camera>();
         cam.orthographic = true;
         cam.orthographicSize = 30f;
@@ -70,7 +71,7 @@ public static class AirportSceneSetup
     public static void AddGridSystem()
     {
         // Cherche un GridSystem existant pour ne pas en créer deux
-        var existing = UnityEngine.Object.FindFirstObjectByType<GridSystem>();
+        var existing = UnityEngine.Object.FindAnyObjectByType<GridSystem>();
         if (existing != null)
         {
             EditorUtility.DisplayDialog("AirportSim", "Un GridSystem existe déjà dans la scène.", "OK");
@@ -94,19 +95,19 @@ public static class AirportSceneSetup
     [MenuItem("AirportSim/Add HUD to Scene")]
     public static void AddHUD()
     {
-        if (Object.FindFirstObjectByType<HUDController>() != null)
+        if (Object.FindAnyObjectByType<HUDController>() != null)
         {
             EditorUtility.DisplayDialog("AirportSim", "Un HUD existe déjà dans la scène.", "OK");
             return;
         }
 
         // ── Systèmes ──────────────────────────────────────────────────────
-        if (Object.FindFirstObjectByType<EconomySystem>() == null)
+        if (Object.FindAnyObjectByType<EconomySystem>() == null)
         {
             var eco = new GameObject("Economy System");
             eco.AddComponent<EconomySystem>();
         }
-        if (Object.FindFirstObjectByType<TimeManager>() == null)
+        if (Object.FindAnyObjectByType<TimeManager>() == null)
         {
             var tm = new GameObject("Time Manager");
             tm.AddComponent<TimeManager>();
@@ -204,6 +205,117 @@ public static class AirportSceneSetup
         rt.offsetMax = Vector2.zero;
 
         return tmp;
+    }
+
+    // ── Étape 1D ──────────────────────────────────────────────────────────────
+
+    [MenuItem("AirportSim/Setup 1D - Build System", true)]
+    public static bool Setup1DValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 1D - Build System")]
+    public static void Setup1D()
+    {
+        EnsureFolder("Assets/_Game", "Prefabs");
+        EnsureFolder("Assets/_Game/Prefabs", "Buildings");
+        EnsureFolder("Assets/_Game", "ScriptableObjects");
+        EnsureFolder("Assets/_Game/ScriptableObjects", "Buildings");
+
+        // ── Matériaux ─────────────────────────────────────────────────────
+        var runwayMat  = CreateOpaqueMat("Assets/_Game/Materials/RunwayMat.mat",
+                             new Color(0.45f, 0.45f, 0.45f));
+        var ghostValid = CreateTransparentMat("Assets/_Game/Materials/GhostValid.mat",
+                             new Color(0f, 1f, 0f, 0.45f));
+        var ghostInvalid = CreateTransparentMat("Assets/_Game/Materials/GhostInvalid.mat",
+                               new Color(1f, 0f, 0f, 0.45f));
+        AssetDatabase.SaveAssets();
+
+        // ── Prefab Runway (cube gris unitaire) ────────────────────────────
+        const string prefabPath = "Assets/_Game/Prefabs/Buildings/Runway.prefab";
+        var existingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        if (existingPrefab == null)
+        {
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = "Runway";
+            cube.GetComponent<MeshRenderer>().sharedMaterial = runwayMat;
+            PrefabUtility.SaveAsPrefabAsset(cube, prefabPath);
+            GameObject.DestroyImmediate(cube);
+            existingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        }
+
+        // ── ScriptableObject BuildingData ─────────────────────────────────
+        const string soPath = "Assets/_Game/ScriptableObjects/Buildings/Runway.asset";
+        var runwaySO = AssetDatabase.LoadAssetAtPath<BuildingData>(soPath);
+        if (runwaySO == null)
+        {
+            runwaySO = ScriptableObject.CreateInstance<BuildingData>();
+            runwaySO.buildingName  = "Runway";
+            runwaySO.category      = BuildingCategory.Runway;
+            runwaySO.cost          = 80_000f;
+            runwaySO.sizeInCells   = new Vector2Int(8, 2);
+            runwaySO.height        = 0.3f;
+            runwaySO.gridType      = BuildingType.Runway;
+            runwaySO.prefab        = existingPrefab;
+            AssetDatabase.CreateAsset(runwaySO, soPath);
+            AssetDatabase.SaveAssets();
+        }
+
+        // ── BuildSystem dans la scène ─────────────────────────────────────
+        var existingBS = Object.FindAnyObjectByType<BuildSystem>();
+        if (existingBS != null)
+        {
+            EditorUtility.DisplayDialog("AirportSim",
+                "Un BuildSystem existe déjà dans la scène.", "OK");
+            return;
+        }
+
+        var bsGo = new GameObject("Build System");
+        var bs   = bsGo.AddComponent<BuildSystem>();
+
+        var bsSO = new SerializedObject(bs);
+        bsSO.FindProperty("startBuilding").objectReferenceValue     = runwaySO;
+        bsSO.FindProperty("ghostValidMaterial").objectReferenceValue   = ghostValid;
+        bsSO.FindProperty("ghostInvalidMaterial").objectReferenceValue = ghostInvalid;
+        bsSO.ApplyModifiedProperties();
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        AssetDatabase.Refresh();
+
+        Debug.Log("[AirportSim] Build System ajouté (Runway 8×2, 80 000 $).");
+        EditorUtility.DisplayDialog("AirportSim",
+            "Build System ajouté !\n\nPrefab   : Assets/_Game/Prefabs/Buildings/Runway.prefab\n" +
+            "Data      : Assets/_Game/ScriptableObjects/Buildings/Runway.asset\n\n" +
+            "Sauvegarde la scène (Ctrl+S) puis Lance Play.\n" +
+            "• Clic gauche = placer  • Clic droit = annuler", "OK");
+    }
+
+    private static Material CreateOpaqueMat(string path, Color color)
+    {
+        var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (existing != null) return existing;
+
+        var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        mat.color = color;
+        AssetDatabase.CreateAsset(mat, path);
+        return mat;
+    }
+
+    private static Material CreateTransparentMat(string path, Color color)
+    {
+        var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (existing != null) return existing;
+
+        var mat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+        // Transparency setup pour URP Unlit
+        mat.SetFloat("_Surface", 1f);
+        mat.SetFloat("_Blend", 0f);
+        mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        mat.SetFloat("_ZWrite", 0f);
+        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        mat.SetColor("_BaseColor", color);
+        AssetDatabase.CreateAsset(mat, path);
+        return mat;
     }
 
     private static void EnsureFolder(string parent, string name)

@@ -22,11 +22,17 @@ Low-poly isométrique — références : Airport CEO, Cities Skylines.
 ```
 Assets/
 └── _Game/
-    ├── Materials/       # Matériaux du jeu
-    ├── Scenes/          # Scènes Unity
+    ├── Materials/            # Matériaux (sol, ghost valide/invalide, bâtiments)
+    ├── Prefabs/Buildings/    # Prefabs des bâtiments (cube gris Runway…)
+    ├── Scenes/               # Scènes Unity
+    ├── ScriptableObjects/    # BuildingData assets (Runway.asset…)
     └── Scripts/
-        ├── Camera/      # Caméra RTS + système de grille
-        └── Editor/      # Outils éditeur (setup scène, grille)
+        ├── Buildings/        # BuildingData, BuildSystem, BuildingCategory
+        ├── Camera/           # RTSCamera, GridSystem
+        ├── Core/             # TimeManager
+        ├── Economy/          # EconomySystem
+        ├── UI/               # HUDController
+        └── Editor/           # AirportSceneSetup (menus Unity)
 ```
 
 ## Avancement
@@ -45,6 +51,13 @@ Assets/
 - API publique : `GetCellFromWorldPos`, `IsCellAvailable`, `SetCellOccupied`
 - Statistiques temps réel dans l'Inspector (Odin ShowInInspector)
 
+### Étape 1D — Premier bâtiment placeable ✅ `v0.4.0`
+- `BuildingData` ScriptableObject (nom, coût, taille, prefab, catégorie, type grille)
+- Bâtiment de test : Runway 8×2 cellules, 80 000 $, cube gris allongé
+- Ghost 3D suit la souris : vert = valide, rouge = invalide ou budget insuffisant
+- Clic gauche = placer et déduire le coût · Clic droit = annuler
+- Utilise `GridSystem.IsCellAvailable` + `EconomySystem.TrySpend`
+
 ### Étape 1C — HUD minimal ✅ `v0.3.0`
 - Budget affiché en haut à gauche : `1 000 000 $`
 - Horloge fictive en haut au centre : `06:00  x1`
@@ -57,8 +70,10 @@ Assets/
 1. Ouvrir le projet dans Unity 6
 2. Menu **AirportSim → Create Airport Scene** pour générer la scène
 3. Menu **AirportSim → Add Grid System to Scene**
-4. Sauvegarder (`Ctrl+S`)
-5. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
+4. Menu **AirportSim → Add HUD to Scene**
+5. Menu **AirportSim → Setup 1D - Build System**
+6. Sauvegarder (`Ctrl+S`)
+7. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
 ## Contrôles
 
@@ -71,6 +86,8 @@ Assets/
 | Zoom | Molette souris |
 
 ### Jeu
-| Action | Touche |
-|--------|--------|
+| Action | Touche / Bouton |
+|--------|-----------------|
 | Cycler vitesse (x1 / x2 / x4) | T |
+| Placer un bâtiment | Clic gauche |
+| Annuler la sélection | Clic droit |
