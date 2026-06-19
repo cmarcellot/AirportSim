@@ -1,6 +1,8 @@
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
+using TMPro;
 
 public static class AirportSceneSetup
 {
@@ -84,6 +86,124 @@ public static class AirportSceneSetup
 
         Debug.Log("[AirportSim] GridSystem ajouté à la scène.");
         EditorUtility.DisplayDialog("AirportSim", "GridSystem ajouté.\nSauvegarde la scène (Ctrl+S).", "OK");
+    }
+
+    [MenuItem("AirportSim/Add HUD to Scene", true)]
+    public static bool AddHUDValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Add HUD to Scene")]
+    public static void AddHUD()
+    {
+        if (Object.FindFirstObjectByType<HUDController>() != null)
+        {
+            EditorUtility.DisplayDialog("AirportSim", "Un HUD existe déjà dans la scène.", "OK");
+            return;
+        }
+
+        // ── Systèmes ──────────────────────────────────────────────────────
+        if (Object.FindFirstObjectByType<EconomySystem>() == null)
+        {
+            var eco = new GameObject("Economy System");
+            eco.AddComponent<EconomySystem>();
+        }
+        if (Object.FindFirstObjectByType<TimeManager>() == null)
+        {
+            var tm = new GameObject("Time Manager");
+            tm.AddComponent<TimeManager>();
+        }
+
+        // ── Canvas ────────────────────────────────────────────────────────
+        var canvasGo = new GameObject("HUD Canvas");
+        var canvas = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 10;
+
+        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.matchWidthOrHeight = 0.5f;
+        canvasGo.AddComponent<GraphicRaycaster>();
+
+        var hud = canvasGo.AddComponent<HUDController>();
+
+        // ── Panel Budget (haut-gauche) ────────────────────────────────────
+        var budgetPanel = CreatePanel(canvasGo.transform, "Budget Panel",
+            new Color(0f, 0f, 0f, 0.65f),
+            anchorMin: new Vector2(0f, 1f), anchorMax: new Vector2(0f, 1f),
+            pivot: new Vector2(0f, 1f),
+            sizeDelta: new Vector2(280f, 54f),
+            anchoredPos: new Vector2(16f, -16f));
+
+        var budgetText = CreateTMPText(budgetPanel.transform, "Budget Text",
+            "1 000 000 $", 22, TextAlignmentOptions.MidlineLeft,
+            padding: new Vector4(12f, 0f, 12f, 0f));
+
+        // ── Panel Horloge (haut-centre) ───────────────────────────────────
+        var timePanel = CreatePanel(canvasGo.transform, "Time Panel",
+            new Color(0f, 0f, 0f, 0.65f),
+            anchorMin: new Vector2(0.5f, 1f), anchorMax: new Vector2(0.5f, 1f),
+            pivot: new Vector2(0.5f, 1f),
+            sizeDelta: new Vector2(200f, 54f),
+            anchoredPos: new Vector2(0f, -16f));
+
+        var timeText = CreateTMPText(timePanel.transform, "Time Text",
+            "06:00  x1", 22, TextAlignmentOptions.Midline,
+            padding: new Vector4(12f, 0f, 12f, 0f));
+
+        // ── Assignation des références ────────────────────────────────────
+        var so = new SerializedObject(hud);
+        so.FindProperty("budgetText").objectReferenceValue = budgetText;
+        so.FindProperty("timeText").objectReferenceValue  = timeText;
+        so.ApplyModifiedProperties();
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        Debug.Log("[AirportSim] HUD ajouté à la scène.");
+        EditorUtility.DisplayDialog("AirportSim", "HUD ajouté.\nSauvegarde la scène (Ctrl+S).", "OK");
+    }
+
+    private static GameObject CreatePanel(Transform parent, string name, Color color,
+        Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
+        Vector2 sizeDelta, Vector2 anchoredPos)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+
+        var img = go.AddComponent<Image>();
+        img.color = color;
+        img.raycastTarget = false;
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin     = anchorMin;
+        rt.anchorMax     = anchorMax;
+        rt.pivot         = pivot;
+        rt.sizeDelta     = sizeDelta;
+        rt.anchoredPosition = anchoredPos;
+
+        return go;
+    }
+
+    private static TMP_Text CreateTMPText(Transform parent, string name,
+        string text, float fontSize, TextAlignmentOptions alignment,
+        Vector4 padding = default)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+
+        var tmp = go.AddComponent<TextMeshProUGUI>();
+        tmp.text      = text;
+        tmp.fontSize  = fontSize;
+        tmp.alignment = alignment;
+        tmp.color     = Color.white;
+        tmp.margin    = padding;
+        tmp.raycastTarget = false;
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        return tmp;
     }
 
     private static void EnsureFolder(string parent, string name)
