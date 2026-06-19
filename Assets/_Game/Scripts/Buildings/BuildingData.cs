@@ -11,5 +11,6 @@ public class BuildingData : ScriptableObject
     [FoldoutGroup("Info")] public float height = 1f;
     [FoldoutGroup("Info")] public BuildingType gridType = BuildingType.None;
 
+    [FoldoutGroup("Visual")] public Color iconColor = Color.white;
     [FoldoutGroup("Visual")] public GameObject prefab;
 }

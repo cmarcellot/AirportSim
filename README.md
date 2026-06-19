@@ -58,6 +58,13 @@ Assets/
 - Canvas Screen Space Overlay, fond noir semi-transparent (TMP)
 - EconomySystem et TimeManager en singleton avec API publique
 
+### Étape 1E — Menu de construction complet ✅ `v0.5.0`
+- 4 bâtiments : Runway, Terminal, Gate, Control Tower (prefabs cubes colorés)
+- Menu en bas d'écran : icône couleur, nom, coût doré par bâtiment
+- Onglets : Tous | Pistes | Terminaux | Services (filtre par catégorie)
+- Bouton grisé si budget insuffisant, surligné si sélectionné
+- Échap pour désélectionner · DOTween slide-from-bottom + punch au clic
+
 ### Étape 1D — Premier bâtiment placeable ✅ `v0.4.0`
 - `BuildingData` ScriptableObject (nom, coût, taille, prefab, catégorie, type grille)
 - Bâtiment de test : Runway 8×2 cellules, 80 000 $, cube gris allongé
@@ -72,8 +79,9 @@ Assets/
 3. Menu **AirportSim → Add Grid System to Scene**
 4. Menu **AirportSim → Add HUD to Scene**
 5. Menu **AirportSim → Setup 1D - Build System**
-6. Sauvegarder (`Ctrl+S`)
-7. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
+6. Menu **AirportSim → Setup 1E - Build Menu**
+7. Sauvegarder (`Ctrl+S`)
+8. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
 ## Contrôles
 
@@ -90,4 +98,4 @@ Assets/
 |--------|-----------------|
 | Cycler vitesse (x1 / x2 / x4) | T |
 | Placer un bâtiment | Clic gauche |
-| Annuler la sélection | Clic droit |
+| Annuler la sélection | Clic droit ou Échap |

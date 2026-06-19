@@ -209,6 +209,160 @@ public static class AirportSceneSetup
 
     // ── Étape 1D ──────────────────────────────────────────────────────────────
 
+    [MenuItem("AirportSim/Setup 1E - Build Menu", true)]
+    public static bool Setup1EValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 1E - Build Menu")]
+    public static void Setup1E()
+    {
+        if (Object.FindAnyObjectByType<BuildMenuController>() != null)
+        {
+            EditorUtility.DisplayDialog("AirportSim", "Un Build Menu existe déjà dans la scène.", "OK");
+            return;
+        }
+
+        EnsureFolder("Assets/_Game/Prefabs", "Buildings");
+        EnsureFolder("Assets/_Game/ScriptableObjects", "Buildings");
+
+        // ── Matériaux ──────────────────────────────────────────────────────
+        var terminalMat = CreateOpaqueMat("Assets/_Game/Materials/TerminalMat.mat",
+                              new Color(0.90f, 0.90f, 0.90f));
+        var gateMat     = CreateOpaqueMat("Assets/_Game/Materials/GateMat.mat",
+                              new Color(0.20f, 0.45f, 0.85f));
+        var towerMat    = CreateOpaqueMat("Assets/_Game/Materials/ControlTowerMat.mat",
+                              new Color(0.85f, 0.20f, 0.20f));
+        AssetDatabase.SaveAssets();
+
+        // ── Prefabs ────────────────────────────────────────────────────────
+        var runwayPrefab  = AssetDatabase.LoadAssetAtPath<GameObject>(
+                                "Assets/_Game/Prefabs/Buildings/Runway.prefab");
+        var terminalPrefab = CreateCubePrefab(
+                                "Assets/_Game/Prefabs/Buildings/Terminal.prefab", terminalMat);
+        var gatePrefab     = CreateCubePrefab(
+                                "Assets/_Game/Prefabs/Buildings/Gate.prefab", gateMat);
+        var towerPrefab    = CreateCubePrefab(
+                                "Assets/_Game/Prefabs/Buildings/ControlTower.prefab", towerMat);
+
+        // ── ScriptableObjects ──────────────────────────────────────────────
+        var runwaySO  = UpsertBuildingData(
+            "Assets/_Game/ScriptableObjects/Buildings/Runway.asset",
+            "Runway", BuildingCategory.Runway, BuildingType.Runway,
+            80_000f, new Vector2Int(8, 2), 0.3f, runwayPrefab,
+            new Color(0.45f, 0.45f, 0.45f));
+
+        var terminalSO = UpsertBuildingData(
+            "Assets/_Game/ScriptableObjects/Buildings/Terminal.asset",
+            "Terminal", BuildingCategory.Terminal, BuildingType.Terminal,
+            150_000f, new Vector2Int(4, 4), 2f, terminalPrefab,
+            new Color(0.90f, 0.90f, 0.90f));
+
+        var gateSO = UpsertBuildingData(
+            "Assets/_Game/ScriptableObjects/Buildings/Gate.asset",
+            "Gate", BuildingCategory.Gate, BuildingType.Terminal,
+            30_000f, new Vector2Int(2, 2), 1.5f, gatePrefab,
+            new Color(0.20f, 0.45f, 0.85f));
+
+        var towerSO = UpsertBuildingData(
+            "Assets/_Game/ScriptableObjects/Buildings/ControlTower.asset",
+            "Control Tower", BuildingCategory.Service, BuildingType.ControlTower,
+            50_000f, new Vector2Int(1, 1), 4f, towerPrefab,
+            new Color(0.85f, 0.20f, 0.20f));
+
+        AssetDatabase.SaveAssets();
+
+        // ── Vide startBuilding dans BuildSystem (menu prend le relais) ─────
+        var bs = Object.FindAnyObjectByType<BuildSystem>();
+        if (bs != null)
+        {
+            var bsSO = new SerializedObject(bs);
+            bsSO.FindProperty("startBuilding").objectReferenceValue = null;
+            bsSO.ApplyModifiedProperties();
+        }
+
+        // ── Canvas Build Menu ──────────────────────────────────────────────
+        var canvasGo = new GameObject("Build Menu Canvas");
+        var canvas   = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode   = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 15;
+
+        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode       = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.matchWidthOrHeight  = 0.5f;
+        canvasGo.AddComponent<GraphicRaycaster>();
+
+        // ── Panel (barre du bas) ───────────────────────────────────────────
+        var panelGo  = new GameObject("MenuPanel", typeof(RectTransform));
+        panelGo.transform.SetParent(canvasGo.transform, false);
+        panelGo.AddComponent<Image>().color = new Color(0.08f, 0.08f, 0.08f, 0.93f);
+        var panelRT  = panelGo.GetComponent<RectTransform>();
+        panelRT.anchorMin        = new Vector2(0f, 0f);
+        panelRT.anchorMax        = new Vector2(1f, 0f);
+        panelRT.pivot            = new Vector2(0.5f, 0f);
+        panelRT.sizeDelta        = new Vector2(0f, 170f);
+        panelRT.anchoredPosition = Vector2.zero;
+
+        // ── BuildMenuController ────────────────────────────────────────────
+        var menu   = canvasGo.AddComponent<BuildMenuController>();
+        var menuSO = new SerializedObject(menu);
+        menuSO.FindProperty("menuPanel").objectReferenceValue = panelRT;
+
+        var listProp = menuSO.FindProperty("availableBuildings");
+        listProp.arraySize = 4;
+        listProp.GetArrayElementAtIndex(0).objectReferenceValue = runwaySO;
+        listProp.GetArrayElementAtIndex(1).objectReferenceValue = terminalSO;
+        listProp.GetArrayElementAtIndex(2).objectReferenceValue = gateSO;
+        listProp.GetArrayElementAtIndex(3).objectReferenceValue = towerSO;
+        menuSO.ApplyModifiedProperties();
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        AssetDatabase.Refresh();
+
+        Debug.Log("[AirportSim] Build Menu ajouté (4 bâtiments).");
+        EditorUtility.DisplayDialog("AirportSim",
+            "Build Menu créé !\n\nRunway · Terminal · Gate · Control Tower\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.\n" +
+            "• Clique un bouton pour sélectionner\n" +
+            "• Clic droit / Échap pour annuler", "OK");
+    }
+
+    private static GameObject CreateCubePrefab(string path, Material mat)
+    {
+        var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        if (existing != null) return existing;
+
+        var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        cube.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        var prefab = PrefabUtility.SaveAsPrefabAsset(cube, path);
+        GameObject.DestroyImmediate(cube);
+        return prefab;
+    }
+
+    private static BuildingData UpsertBuildingData(string path, string buildingName,
+        BuildingCategory category, BuildingType gridType, float cost,
+        Vector2Int size, float height, GameObject prefab, Color iconColor)
+    {
+        var existing = AssetDatabase.LoadAssetAtPath<BuildingData>(path);
+        if (existing != null)
+        {
+            existing.iconColor = iconColor;
+            EditorUtility.SetDirty(existing);
+            return existing;
+        }
+
+        var so = ScriptableObject.CreateInstance<BuildingData>();
+        so.buildingName = buildingName;
+        so.category     = category;
+        so.gridType     = gridType;
+        so.cost         = cost;
+        so.sizeInCells  = size;
+        so.height       = height;
+        so.prefab       = prefab;
+        so.iconColor    = iconColor;
+        AssetDatabase.CreateAsset(so, path);
+        return so;
+    }
+
     [MenuItem("AirportSim/Setup 1D - Build System", true)]
     public static bool Setup1DValidate() => !Application.isPlaying;
 

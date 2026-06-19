@@ -16,6 +16,9 @@ public class BuildSystem : MonoBehaviour
     [ShowInInspector, ReadOnly, FoldoutGroup("Runtime")] private Vector2Int _hoveredCell;
     [ShowInInspector, ReadOnly, FoldoutGroup("Runtime")] private bool _placementValid;
 
+    public BuildingData CurrentBuilding => _selectedBuilding;
+    public event System.Action<BuildingData> OnBuildingChanged;
+
     private BuildingData _selectedBuilding;
     private GameObject _ghostObject;
     private GridSystem _grid;
@@ -40,23 +43,23 @@ public class BuildSystem : MonoBehaviour
         HandleInput();
     }
 
-    private void SelectBuilding(BuildingData data)
+    public void SelectBuilding(BuildingData data)
     {
         DestroyGhost();
-        if (data == null) return;
+        if (data == null) { _selectedBuilding = null; OnBuildingChanged?.Invoke(null); return; }
 
         _selectedBuilding = data;
         _ghostObject = Instantiate(data.prefab);
         _ghostObject.name = "Ghost";
         _ghostObject.transform.localScale = BuildingScale(data);
 
-        // Le ghost ne doit pas interagir avec la physique
         foreach (var col in _ghostObject.GetComponentsInChildren<Collider>())
             Destroy(col);
 
-        // Désactive les ombres du ghost
         foreach (var r in _ghostObject.GetComponentsInChildren<Renderer>())
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        OnBuildingChanged?.Invoke(_selectedBuilding);
     }
 
     private void UpdateGhost()
@@ -105,10 +108,11 @@ public class BuildSystem : MonoBehaviour
         _grid.SetCellOccupied(_hoveredCell, _selectedBuilding.sizeInCells, _selectedBuilding.gridType);
     }
 
-    private void CancelSelection()
+    public void CancelSelection()
     {
         DestroyGhost();
         _selectedBuilding = null;
+        OnBuildingChanged?.Invoke(null);
     }
 
     private void DestroyGhost()
