@@ -4,7 +4,7 @@ using Sirenix.OdinInspector;
 
 public class PathfindingSystem : MonoBehaviour
 {
-    // ── Nœud A* partagé ───────────────────────────────────────────────────
+    // ── Nœud A* ────────────────────────────────────────────────────────────
     private class Node
     {
         public Vector2Int Cell;
@@ -14,97 +14,66 @@ public class PathfindingSystem : MonoBehaviour
         public Node       Parent;
     }
 
-    // ── Types navigables par graphe ────────────────────────────────────────
-    private static readonly HashSet<BuildingType> AirsideTypes = new()
-    {
-        BuildingType.Runway, BuildingType.Taxiway, BuildingType.Apron,
-        BuildingType.Gate, BuildingType.FuelStation, BuildingType.CargoArea,
-    };
+    // ── Types de zones par graphe ──────────────────────────────────────────
+    private static readonly HashSet<ZoneType> AirsideZones  = new()
+        { ZoneType.Runway, ZoneType.Taxiway, ZoneType.Apron };
 
-    private static readonly HashSet<BuildingType> LandsideTypes = new()
-    {
-        BuildingType.Terminal, BuildingType.Hall, BuildingType.CheckIn,
-        BuildingType.SecurityCheckpoint, BuildingType.Customs, BuildingType.BoardingLounge,
-        BuildingType.Shop, BuildingType.Restaurant,
-        BuildingType.Parking, BuildingType.RoadAccess, BuildingType.BusStop, BuildingType.TaxiZone,
-    };
+    private static readonly HashSet<ZoneType> LandsideZones = new()
+        { ZoneType.TerminalHall, ZoneType.CheckInArea, ZoneType.SecurityArea,
+          ZoneType.CustomsArea,  ZoneType.BoardingLounge };
 
-    // ── Paramètres ─────────────────────────────────────────────────────────
-    [FoldoutGroup("Airside Pathfinding")]
-    [SerializeField] private float cellSize = 4f;
-    [FoldoutGroup("Airside Pathfinding")]
-    [SerializeField] private Vector2Int gridDimensions = new Vector2Int(128, 128);
+    // ── Config ─────────────────────────────────────────────────────────────
+    [FoldoutGroup("Pathfinding")] [SerializeField] private float      cellSize       = 4f;
+    [FoldoutGroup("Pathfinding")] [SerializeField] private Vector2Int gridDimensions = new(128, 128);
 
-    [FoldoutGroup("Airside Pathfinding")]
-    [ShowInInspector, ReadOnly] public int AirsideNodeCount => _airside.Count;
-
-    [FoldoutGroup("Landside Pathfinding")]
-    [ShowInInspector, ReadOnly] public int LandsideNodeCount => _landside.Count;
+    // ── Stats ──────────────────────────────────────────────────────────────
+    [ShowInInspector, ReadOnly, FoldoutGroup("Pathfinding")]
+    public int AirsideNodeCount  => _airside.Count;
+    [ShowInInspector, ReadOnly, FoldoutGroup("Pathfinding")]
+    public int LandsideNodeCount => _landside.Count;
 
     // ── Debug visuel ───────────────────────────────────────────────────────
-    [FoldoutGroup("Airside Pathfinding")]
-    [SerializeField] private bool showAirside = true;
-    [FoldoutGroup("Airside Pathfinding")]
-    [SerializeField] private Vector3 airsideDebugStart;
-    [FoldoutGroup("Airside Pathfinding")]
-    [SerializeField] private Vector3 airsideDebugEnd;
+    [FoldoutGroup("Pathfinding")] [SerializeField] private bool showAirside  = true;
+    [FoldoutGroup("Pathfinding")] [SerializeField] private bool showLandside = true;
 
-    [FoldoutGroup("Landside Pathfinding")]
-    [SerializeField] private bool showLandside = true;
-    [FoldoutGroup("Landside Pathfinding")]
-    [SerializeField] private Vector3 landsideDebugStart;
-    [FoldoutGroup("Landside Pathfinding")]
-    [SerializeField] private Vector3 landsideDebugEnd;
-
-    // ── État interne ───────────────────────────────────────────────────────
-    private GridSystem _grid;
+    // ── Runtime ────────────────────────────────────────────────────────────
+    private ZoneSystem _zones;
     private readonly Dictionary<Vector2Int, Node> _airside  = new();
     private readonly Dictionary<Vector2Int, Node> _landside = new();
     private List<Vector3> _debugAirside  = new();
     private List<Vector3> _debugLandside = new();
-
-    private int   _lastAirsideCount  = -1;
-    private int   _lastLandsideCount = -1;
-    private float _checkTimer;
-    private const float CheckInterval = 0.5f;
 
     private static readonly Vector2Int[] Dirs =
         { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
-    private void Awake() => _grid = FindAnyObjectByType<GridSystem>();
+    private void Awake()
+    {
+        _zones = FindAnyObjectByType<ZoneSystem>();
+        if (_zones != null) _zones.OnZoneChanged += RebuildAllGraphs;
+    }
 
     private void Start() => RebuildAllGraphs();
 
-    private void Update()
+    private void OnDestroy()
     {
-        _checkTimer += Time.deltaTime;
-        if (_checkTimer < CheckInterval) return;
-        _checkTimer = 0f;
-
-        int a = CountType(AirsideTypes);
-        int l = CountType(LandsideTypes);
-        if (a != _lastAirsideCount || l != _lastLandsideCount)
-            RebuildAllGraphs();
+        if (_zones != null) _zones.OnZoneChanged -= RebuildAllGraphs;
     }
 
     // ── API publique ───────────────────────────────────────────────────────
 
-    [Button("Rebuild All Graphs"), FoldoutGroup("Airside Pathfinding")]
+    [Button("Rebuild Pathfinding"), FoldoutGroup("Pathfinding")]
     public void RebuildAllGraphs()
     {
-        if (_grid == null) _grid = FindAnyObjectByType<GridSystem>();
-        if (_grid == null) return;
+        if (_zones == null) _zones = FindAnyObjectByType<ZoneSystem>();
+        if (_zones == null) return;
 
-        BuildGraph(_airside,  AirsideTypes);
-        BuildGraph(_landside, LandsideTypes);
+        BuildGraph(_airside,  AirsideZones);
+        BuildGraph(_landside, LandsideZones);
 
-        _lastAirsideCount  = _airside.Count;
-        _lastLandsideCount = _landside.Count;
-
-        AutoDebugPath(_airside,  ref _debugAirside,  ref airsideDebugStart,  ref airsideDebugEnd);
-        AutoDebugPath(_landside, ref _debugLandside, ref landsideDebugStart, ref landsideDebugEnd);
+        AutoDebugPath(_airside,  ref _debugAirside);
+        AutoDebugPath(_landside, ref _debugLandside);
     }
 
     public List<Vector3> FindAirsidePath(Vector3 start, Vector3 end)
@@ -115,35 +84,29 @@ public class PathfindingSystem : MonoBehaviour
 
     // ── Construction du graphe ─────────────────────────────────────────────
 
-    private void BuildGraph(Dictionary<Vector2Int, Node> graph, HashSet<BuildingType> types)
+    private void BuildGraph(Dictionary<Vector2Int, Node> graph, HashSet<ZoneType> types)
     {
         graph.Clear();
-
         for (int x = 0; x < gridDimensions.x; x++)
         for (int z = 0; z < gridDimensions.y; z++)
         {
             var cell = new Vector2Int(x, z);
-            if (types.Contains(_grid.GetCell(cell).Building))
+            var zone = _zones.GetZone(cell);
+            if (zone.HasValue && types.Contains(zone.Value))
                 graph[cell] = new Node { Cell = cell, WorldPos = CellToWorld(cell) };
         }
-
         foreach (var (cell, node) in graph)
         foreach (var dir in Dirs)
-        {
             if (graph.TryGetValue(cell + dir, out var nb))
                 node.Neighbors.Add(nb);
-        }
     }
 
     // ── A* ─────────────────────────────────────────────────────────────────
 
-    private List<Vector3> AStar(Dictionary<Vector2Int, Node> graph,
-                                Vector3 startW, Vector3 endW)
+    private List<Vector3> AStar(Dictionary<Vector2Int, Node> graph, Vector3 startW, Vector3 endW)
     {
-        if (_grid == null) return new();
-
-        var sc = _grid.GetCellFromWorldPos(startW);
-        var ec = _grid.GetCellFromWorldPos(endW);
+        var sc = WorldToCell(startW);
+        var ec = WorldToCell(endW);
 
         if (!graph.TryGetValue(sc, out var startNode) || !graph.ContainsKey(ec))
             return new();
@@ -167,19 +130,15 @@ public class PathfindingSystem : MonoBehaviour
 
             if (cur.Cell == ec) return Reconstruct(cur);
 
-            open.Remove(cur);
-            openSet.Remove(cur.Cell);
-            closed.Add(cur.Cell);
+            open.Remove(cur); openSet.Remove(cur.Cell); closed.Add(cur.Cell);
 
             foreach (var nb in cur.Neighbors)
             {
                 if (closed.Contains(nb.Cell)) continue;
                 float g = cur.G + 1f;
                 if (g >= nb.G) continue;
-
                 nb.G = g; nb.H = Heuristic(nb.Cell, ec);
                 nb.F = g + nb.H; nb.Parent = cur;
-
                 if (!openSet.Contains(nb.Cell)) { open.Add(nb); openSet.Add(nb.Cell); }
             }
         }
@@ -199,8 +158,7 @@ public class PathfindingSystem : MonoBehaviour
 
     // ── Debug auto ─────────────────────────────────────────────────────────
 
-    private void AutoDebugPath(Dictionary<Vector2Int, Node> graph, ref List<Vector3> path,
-                               ref Vector3 startPos, ref Vector3 endPos)
+    private void AutoDebugPath(Dictionary<Vector2Int, Node> graph, ref List<Vector3> path)
     {
         path = new();
         if (graph.Count < 2) return;
@@ -211,21 +169,7 @@ public class PathfindingSystem : MonoBehaviour
             if (s == null || n.Cell.x + n.Cell.y < s.Cell.x + s.Cell.y) s = n;
             if (e == null || n.Cell.x + n.Cell.y > e.Cell.x + e.Cell.y) e = n;
         }
-        startPos = s!.WorldPos;
-        endPos   = e!.WorldPos;
-        path     = AStar(graph, startPos, endPos);
-    }
-
-    // ── Comptage ───────────────────────────────────────────────────────────
-
-    private int CountType(HashSet<BuildingType> types)
-    {
-        if (_grid == null) return 0;
-        int c = 0;
-        for (int x = 0; x < gridDimensions.x; x++)
-        for (int z = 0; z < gridDimensions.y; z++)
-            if (types.Contains(_grid.GetCell(new Vector2Int(x, z)).Building)) c++;
-        return c;
+        path = AStar(graph, s!.WorldPos, e!.WorldPos);
     }
 
     // ── Gizmos ─────────────────────────────────────────────────────────────
@@ -233,50 +177,51 @@ public class PathfindingSystem : MonoBehaviour
     private void OnDrawGizmos()
     {
         const float y  = 0.6f;
-        const float y2 = 0.7f;
+        const float y2 = 0.8f;
 
         if (showAirside)
         {
             Gizmos.color = Color.blue;
-            foreach (var n in _airside.Values)
-                Gizmos.DrawSphere(n.WorldPos + Vector3.up * y, 0.2f);
-
-            Gizmos.color = new Color(0.5f, 0.5f, 1f, 0.4f);
+            foreach (var n in _airside.Values) Gizmos.DrawSphere(n.WorldPos + Vector3.up * y, 0.15f);
+            Gizmos.color = new Color(0.5f, 0.5f, 1f, 0.3f);
             foreach (var n in _airside.Values)
                 foreach (var nb in n.Neighbors)
                     Gizmos.DrawLine(n.WorldPos + Vector3.up * y, nb.WorldPos + Vector3.up * y);
-
             if (_debugAirside is { Count: > 1 })
             {
                 Gizmos.color = Color.yellow;
                 for (int i = 0; i < _debugAirside.Count - 1; i++)
-                    Gizmos.DrawLine(_debugAirside[i]     + Vector3.up * y2,
-                                    _debugAirside[i + 1] + Vector3.up * y2);
+                    Gizmos.DrawLine(_debugAirside[i] + Vector3.up * y2, _debugAirside[i+1] + Vector3.up * y2);
             }
         }
 
         if (showLandside)
         {
             Gizmos.color = Color.green;
-            foreach (var n in _landside.Values)
-                Gizmos.DrawSphere(n.WorldPos + Vector3.up * y, 0.2f);
-
-            Gizmos.color = new Color(0.5f, 1f, 0.5f, 0.4f);
+            foreach (var n in _landside.Values) Gizmos.DrawSphere(n.WorldPos + Vector3.up * y, 0.15f);
+            Gizmos.color = new Color(0.5f, 1f, 0.5f, 0.3f);
             foreach (var n in _landside.Values)
                 foreach (var nb in n.Neighbors)
                     Gizmos.DrawLine(n.WorldPos + Vector3.up * y, nb.WorldPos + Vector3.up * y);
-
             if (_debugLandside is { Count: > 1 })
             {
-                Gizmos.color = new Color(1f, 0.55f, 0f); // orange
+                Gizmos.color = new Color(1f, 0.55f, 0f);
                 for (int i = 0; i < _debugLandside.Count - 1; i++)
-                    Gizmos.DrawLine(_debugLandside[i]     + Vector3.up * y2,
-                                    _debugLandside[i + 1] + Vector3.up * y2);
+                    Gizmos.DrawLine(_debugLandside[i] + Vector3.up * y2, _debugLandside[i+1] + Vector3.up * y2);
             }
         }
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
+
+    private Vector2Int WorldToCell(Vector3 world)
+    {
+        float hw = gridDimensions.x * cellSize * 0.5f;
+        float hh = gridDimensions.y * cellSize * 0.5f;
+        return new Vector2Int(
+            Mathf.Clamp(Mathf.FloorToInt((world.x + hw) / cellSize), 0, gridDimensions.x - 1),
+            Mathf.Clamp(Mathf.FloorToInt((world.z + hh) / cellSize), 0, gridDimensions.y - 1));
+    }
 
     private Vector3 CellToWorld(Vector2Int cell)
     {

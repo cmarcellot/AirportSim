@@ -219,99 +219,243 @@ public static class AirportSceneSetup
     [MenuItem("AirportSim/Setup 2A - Zones & Pathfinding")]
     public static void Setup2A()
     {
-        EnsureFolder("Assets/_Game/Prefabs",          "Buildings");
+        EnsureFolder("Assets/_Game", "Materials");
+        EnsureFolder("Assets/_Game/Materials", "Zones");
+        EnsureFolder("Assets/_Game", "ScriptableObjects");
+        EnsureFolder("Assets/_Game/ScriptableObjects", "Zones");
+        EnsureFolder("Assets/_Game", "Prefabs");
+        EnsureFolder("Assets/_Game/Prefabs", "Buildings");
         EnsureFolder("Assets/_Game/ScriptableObjects", "Buildings");
 
-        // ── Définition complète des bâtiments ─────────────────────────────
-        // (name, category, gridType, cost, sizeX, sizeZ, height, color)
-        var defs = new (string n, BuildingCategory cat, BuildingType type,
-                        float cost, int sx, int sz, float h, Color col)[]
+        // ══════════════════════════════════════════════════════════════════
+        // 1. MATÉRIAUX DE ZONE (simples couleurs URP Lit + GPU instancing)
+        // ══════════════════════════════════════════════════════════════════
+        // (slug, hex color r,g,b)
+        var zoneMats = new (string slug, Color col)[]
         {
-            // Piste (Airside)
-            ("Runway",       BuildingCategory.Runway,       BuildingType.Runway,
-              80_000f, 8, 2, 0.3f,  new Color(0.45f, 0.45f, 0.45f)),
-            ("Taxiway",      BuildingCategory.Taxiway,      BuildingType.Taxiway,
-               5_000f, 1, 1, 0.1f,  new Color(0.22f, 0.22f, 0.22f)),
-            ("Apron",        BuildingCategory.Apron,        BuildingType.Apron,
-              20_000f, 2, 2, 0.15f, new Color(0.35f, 0.35f, 0.35f)),
-            ("Gate",         BuildingCategory.Gate,         BuildingType.Gate,
-              30_000f, 2, 2, 1.5f,  new Color(0.20f, 0.45f, 0.85f)),
-            ("FuelStation",  BuildingCategory.FuelStation,  BuildingType.FuelStation,
-              40_000f, 2, 1, 1.5f,  new Color(0.90f, 0.70f, 0.10f)),
-            ("ControlTower", BuildingCategory.ControlTower, BuildingType.ControlTower,
-              50_000f, 1, 1, 4.0f,  new Color(0.85f, 0.20f, 0.20f)),
-
-            // Terminal (Landside)
-            ("Terminal",     BuildingCategory.Terminal,     BuildingType.Terminal,
-             200_000f, 6, 8, 2.0f,  new Color(0.90f, 0.90f, 0.90f)),
-            ("Hall",         BuildingCategory.Hall,         BuildingType.Hall,
-              80_000f, 4, 4, 2.0f,  new Color(0.70f, 0.85f, 1.00f)),
-            ("CheckIn",      BuildingCategory.CheckIn,      BuildingType.CheckIn,
-              25_000f, 3, 2, 1.5f,  new Color(0.30f, 0.80f, 0.70f)),
-            ("Security",     BuildingCategory.SecurityCheckpoint, BuildingType.SecurityCheckpoint,
-              35_000f, 2, 2, 1.5f,  new Color(0.95f, 0.55f, 0.15f)),
-            ("Shop",         BuildingCategory.Shop,         BuildingType.Shop,
-              15_000f, 2, 2, 1.5f,  new Color(0.75f, 0.40f, 0.90f)),
-            ("Restaurant",   BuildingCategory.Restaurant,   BuildingType.Restaurant,
-              20_000f, 3, 2, 1.5f,  new Color(0.90f, 0.35f, 0.45f)),
-
-            // Accès
-            ("Parking",      BuildingCategory.Parking,      BuildingType.Parking,
-              50_000f, 4, 4, 0.15f, new Color(0.25f, 0.30f, 0.35f)),
-            ("RoadAccess",   BuildingCategory.RoadAccess,   BuildingType.RoadAccess,
-               2_000f, 1, 1, 0.15f, new Color(0.30f, 0.30f, 0.30f)),
-            ("BusStop",      BuildingCategory.BusStop,      BuildingType.BusStop,
-              10_000f, 2, 1, 1.5f,  new Color(0.95f, 0.85f, 0.10f)),
+            ("Runway",        new Color(0.541f, 0.541f, 0.541f)),
+            ("Taxiway",       new Color(0.420f, 0.420f, 0.420f)),
+            ("Apron",         new Color(0.333f, 0.333f, 0.333f)),
+            ("TerminalHall",  new Color(0.941f, 0.929f, 0.910f)),
+            ("CheckInArea",   new Color(0.839f, 0.910f, 0.941f)),
+            ("SecurityArea",  new Color(0.784f, 0.784f, 0.784f)),
+            ("CustomsArea",   new Color(0.647f, 0.647f, 0.667f)),
+            ("BoardingLounge",new Color(0.290f, 0.435f, 0.647f)),
+            ("Parking",       new Color(0.227f, 0.227f, 0.227f)),
+            ("RoadAccess",    new Color(0.180f, 0.180f, 0.180f)),
+            ("GreenArea",     new Color(0.353f, 0.541f, 0.235f)),
         };
-
-        // ── Création/mise à jour de tous les assets ───────────────────────
-        var allSOs = new BuildingData[defs.Length];
-        for (int i = 0; i < defs.Length; i++)
+        var matMap = new System.Collections.Generic.Dictionary<string, Material>();
+        foreach (var (slug, col) in zoneMats)
         {
-            var d    = defs[i];
-            var mat  = CreateOpaqueMat($"Assets/_Game/Materials/{d.n}Mat.mat", d.col);
-            var pfab = CreateCubePrefab($"Assets/_Game/Prefabs/Buildings/{d.n}.prefab", mat);
-            allSOs[i] = UpsertBuildingData(
-                $"Assets/_Game/ScriptableObjects/Buildings/{d.n}.asset",
-                d.n == "Security" ? "Security" : d.n.Replace("_", " "),
-                d.cat, d.type, d.cost, new Vector2Int(d.sx, d.sz), d.h, pfab, d.col);
+            var mat = CreateZoneMat($"Assets/_Game/Materials/Zones/{slug}Mat.mat", col);
+            matMap[slug] = mat;
         }
         AssetDatabase.SaveAssets();
 
-        // ── Met à jour la liste complète dans BuildMenuController ─────────
-        var menu = Object.FindAnyObjectByType<BuildMenuController>();
-        if (menu != null)
+        // ══════════════════════════════════════════════════════════════════
+        // 2. SCRIPTABLEOBJECTS ZoneData
+        // ══════════════════════════════════════════════════════════════════
+        // (slug, ZoneType, displayName, costPerCell, color, isAirside, isRestricted)
+        var zoneDefs = new (string slug, ZoneType type, string display,
+                            float cost, Color col, bool airside, bool restricted)[]
         {
-            var menuSO = new SerializedObject(menu);
-            var list   = menuSO.FindProperty("availableBuildings");
-            list.arraySize = allSOs.Length;
-            for (int i = 0; i < allSOs.Length; i++)
-                list.GetArrayElementAtIndex(i).objectReferenceValue = allSOs[i];
-            menuSO.ApplyModifiedProperties();
+            ("Runway",         ZoneType.Runway,         "Runway",          10_000f, new Color(0.541f,0.541f,0.541f), true,  false),
+            ("Taxiway",        ZoneType.Taxiway,        "Taxiway",          3_000f, new Color(0.420f,0.420f,0.420f), true,  false),
+            ("Apron",          ZoneType.Apron,          "Apron",            2_000f, new Color(0.333f,0.333f,0.333f), true,  false),
+            ("TerminalHall",   ZoneType.TerminalHall,   "Terminal Hall",    5_000f, new Color(0.941f,0.929f,0.910f), false, false),
+            ("CheckInArea",    ZoneType.CheckInArea,    "Check-In",         3_000f, new Color(0.839f,0.910f,0.941f), false, false),
+            ("SecurityArea",   ZoneType.SecurityArea,   "Security",         4_000f, new Color(0.784f,0.784f,0.784f), false, true),
+            ("CustomsArea",    ZoneType.CustomsArea,    "Customs",          3_500f, new Color(0.647f,0.647f,0.667f), false, true),
+            ("BoardingLounge", ZoneType.BoardingLounge, "Boarding Lounge",  4_000f, new Color(0.290f,0.435f,0.647f), false, true),
+            ("Parking",        ZoneType.Parking,        "Parking",          1_000f, new Color(0.227f,0.227f,0.227f), false, false),
+            ("RoadAccess",     ZoneType.RoadAccess,     "Road Access",        800f, new Color(0.180f,0.180f,0.180f), false, false),
+            ("GreenArea",      ZoneType.GreenArea,      "Green Area",         200f, new Color(0.353f,0.541f,0.235f), false, false),
+        };
+        var zoneSOs = new ZoneData[zoneDefs.Length];
+        for (int i = 0; i < zoneDefs.Length; i++)
+        {
+            var d = zoneDefs[i];
+            zoneSOs[i] = UpsertZoneData(
+                $"Assets/_Game/ScriptableObjects/Zones/{d.slug}.asset",
+                d.type, d.display, d.cost, d.col,
+                matMap.TryGetValue(d.slug, out var m) ? m : null,
+                d.airside, d.restricted);
         }
-        else
-            Debug.LogWarning("[AirportSim] BuildMenuController introuvable — lance d'abord Setup 1E.");
+        AssetDatabase.SaveAssets();
 
-        // ── Remplace TaxiwayGraph par ZoneSystem + PathfindingSystem ──────
-        var oldGraph = Object.FindAnyObjectByType<TaxiwayGraph>();
-        if (oldGraph != null) Object.DestroyImmediate(oldGraph.gameObject);
+        // ══════════════════════════════════════════════════════════════════
+        // 3. BÂTIMENTS (5 objets placés sur grille)
+        // ══════════════════════════════════════════════════════════════════
+        var buildDefs = new (string n, BuildingCategory cat, BuildingType type,
+                             float cost, int sx, int sz, float h, Color col)[]
+        {
+            ("ControlTower", BuildingCategory.ControlTower, BuildingType.ControlTower,
+              50_000f, 1, 1, 4.0f, new Color(0.85f, 0.20f, 0.20f)),
+            ("Gate",         BuildingCategory.Gate,         BuildingType.Gate,
+              30_000f, 2, 2, 1.5f, new Color(0.20f, 0.45f, 0.85f)),
+            ("FuelStation",  BuildingCategory.FuelStation,  BuildingType.FuelStation,
+              40_000f, 2, 1, 1.5f, new Color(0.90f, 0.70f, 0.10f)),
+            ("Shop",         BuildingCategory.Shop,         BuildingType.Shop,
+              15_000f, 2, 2, 1.5f, new Color(0.75f, 0.40f, 0.90f)),
+            ("Restaurant",   BuildingCategory.Restaurant,   BuildingType.Restaurant,
+              20_000f, 3, 2, 1.5f, new Color(0.90f, 0.35f, 0.45f)),
+        };
+        var buildSOs = new BuildingData[buildDefs.Length];
+        for (int i = 0; i < buildDefs.Length; i++)
+        {
+            var d    = buildDefs[i];
+            var mat  = CreateOpaqueMat($"Assets/_Game/Materials/{d.n}Mat.mat", d.col);
+            var pfab = CreateCubePrefab($"Assets/_Game/Prefabs/Buildings/{d.n}.prefab", mat);
+            buildSOs[i] = UpsertBuildingData(
+                $"Assets/_Game/ScriptableObjects/Buildings/{d.n}.asset",
+                d.n, d.cat, d.type, d.cost, new Vector2Int(d.sx, d.sz), d.h, pfab, d.col);
+        }
+        AssetDatabase.SaveAssets();
 
-        if (Object.FindAnyObjectByType<ZoneSystem>() == null)
-            new GameObject("Zone System").AddComponent<ZoneSystem>();
+        // ══════════════════════════════════════════════════════════════════
+        // 4. SCÈNE : supprime anciens systèmes, ajoute les nouveaux
+        // ══════════════════════════════════════════════════════════════════
+        foreach (var old in new System.Type[]
+            { typeof(TaxiwayGraph), typeof(ZoneSystem), typeof(ZonePainter),
+              typeof(GroundRenderer), typeof(PathfindingSystem) })
+        {
+            var found = (MonoBehaviour)Object.FindAnyObjectByType(old);
+            if (found != null) Object.DestroyImmediate(found.gameObject);
+        }
 
-        if (Object.FindAnyObjectByType<PathfindingSystem>() == null)
-            new GameObject("Pathfinding System").AddComponent<PathfindingSystem>();
+        var zoneSystemGo = new GameObject("Zone System");
+        zoneSystemGo.AddComponent<ZoneSystem>();
+
+        var painterGo = new GameObject("Zone Painter");
+        painterGo.AddComponent<ZonePainter>();
+
+        var rendererGo = new GameObject("Ground Renderer");
+        var gr         = rendererGo.AddComponent<GroundRenderer>();
+        var grSO       = new SerializedObject(gr);
+        var grList     = grSO.FindProperty("zoneDataList");
+        grList.arraySize = zoneSOs.Length;
+        for (int i = 0; i < zoneSOs.Length; i++)
+            grList.GetArrayElementAtIndex(i).objectReferenceValue = zoneSOs[i];
+        grSO.ApplyModifiedProperties();
+
+        var pathGo = new GameObject("Pathfinding System");
+        pathGo.AddComponent<PathfindingSystem>();
+
+        // ══════════════════════════════════════════════════════════════════
+        // 5. MENU DE CONSTRUCTION — recrée entièrement le canvas
+        // ══════════════════════════════════════════════════════════════════
+        var oldCanvas = GameObject.Find("Build Menu Canvas");
+        if (oldCanvas != null) Object.DestroyImmediate(oldCanvas);
+
+        // Canvas
+        var canvasGo = new GameObject("Build Menu Canvas");
+        var canvas   = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode   = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 15;
+        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.matchWidthOrHeight  = 0.5f;
+        canvasGo.AddComponent<GraphicRaycaster>();
+
+        // Panel (barre du bas)
+        var panelGo = new GameObject("MenuPanel", typeof(RectTransform));
+        panelGo.transform.SetParent(canvasGo.transform, false);
+        panelGo.AddComponent<Image>().color = new Color(0.08f, 0.08f, 0.08f, 0.93f);
+        var panelRT = panelGo.GetComponent<RectTransform>();
+        panelRT.anchorMin        = new Vector2(0f, 0f);
+        panelRT.anchorMax        = new Vector2(1f, 0f);
+        panelRT.pivot            = new Vector2(0.5f, 0f);
+        panelRT.sizeDelta        = new Vector2(0f, 170f);
+        panelRT.anchoredPosition = Vector2.zero;
+
+        // BuildMenuController
+        var menuCtrl = canvasGo.AddComponent<BuildMenuController>();
+        var menuSO   = new SerializedObject(menuCtrl);
+        menuSO.FindProperty("menuPanel").objectReferenceValue = panelRT;
+
+        var zoneList = menuSO.FindProperty("availableZones");
+        zoneList.arraySize = zoneSOs.Length;
+        for (int i = 0; i < zoneSOs.Length; i++)
+            zoneList.GetArrayElementAtIndex(i).objectReferenceValue = zoneSOs[i];
+
+        var buildList = menuSO.FindProperty("availableBuildings");
+        buildList.arraySize = buildSOs.Length;
+        for (int i = 0; i < buildSOs.Length; i++)
+            buildList.GetArrayElementAtIndex(i).objectReferenceValue = buildSOs[i];
+
+        menuSO.ApplyModifiedProperties();
+
+        // Vide startBuilding dans BuildSystem
+        var bs = Object.FindAnyObjectByType<BuildSystem>();
+        if (bs != null)
+        {
+            var bsSO = new SerializedObject(bs);
+            bsSO.FindProperty("startBuilding").objectReferenceValue = null;
+            bsSO.ApplyModifiedProperties();
+        }
+
+        // Matériau sol par défaut → herbe claire
+        var defaultGround = CreateZoneMat("Assets/_Game/Materials/Zones/DefaultMat.mat",
+                                          new Color(0.478f, 0.714f, 0.282f));
+        var groundObj = GameObject.Find("Ground");
+        if (groundObj != null)
+            groundObj.GetComponent<MeshRenderer>().sharedMaterial = defaultGround;
 
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
         AssetDatabase.Refresh();
 
-        Debug.Log("[AirportSim] Setup 2A terminé — 15 bâtiments, ZoneSystem, PathfindingSystem.");
+        Debug.Log("[AirportSim] Setup 2A terminé — zones dessinables, pathfinding dual, 5 bâtiments.");
         EditorUtility.DisplayDialog("AirportSim",
             "Setup 2A terminé !\n\n" +
-            "• 15 bâtiments créés/mis à jour (Piste / Terminal / Accès)\n" +
-            "• ZoneSystem et PathfindingSystem ajoutés\n\n" +
+            "• 11 zones dessinables (Runway / Terminal / Landside)\n" +
+            "• ZonePainter : clic gauche = peindre, clic droit = effacer\n" +
+            "• GroundRenderer : rendu GPU instancié par type de zone\n" +
+            "• PathfindingSystem : AirsideGraph + LandsideGraph\n" +
+            "• 5 bâtiments placés sur grille (onglet Bâtiments)\n\n" +
             "Sauvegarde (Ctrl+S) puis Play.\n" +
-            "Pose des bâtiments → graphes reconstruits automatiquement.", "OK");
+            "Onglet Zones → clique une zone → glisse sur la carte.", "OK");
+    }
+
+    private static Material CreateZoneMat(string path, Color color)
+    {
+        var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (existing != null) return existing;
+
+        var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        mat.color            = color;
+        mat.enableInstancing = true;
+        AssetDatabase.CreateAsset(mat, path);
+        return mat;
+    }
+
+    private static ZoneData UpsertZoneData(string path, ZoneType type, string displayName,
+        float costPerCell, Color zoneColor, Material groundMaterial, bool isAirside, bool isRestricted)
+    {
+        var existing = AssetDatabase.LoadAssetAtPath<ZoneData>(path);
+        if (existing != null)
+        {
+            existing.type           = type;
+            existing.displayName    = displayName;
+            existing.costPerCell    = costPerCell;
+            existing.zoneColor      = zoneColor;
+            if (groundMaterial != null) existing.groundMaterial = groundMaterial;
+            existing.isAirside      = isAirside;
+            existing.isRestricted   = isRestricted;
+            EditorUtility.SetDirty(existing);
+            return existing;
+        }
+        var so = ScriptableObject.CreateInstance<ZoneData>();
+        so.type           = type;
+        so.displayName    = displayName;
+        so.costPerCell    = costPerCell;
+        so.zoneColor      = zoneColor;
+        so.groundMaterial = groundMaterial;
+        so.isAirside      = isAirside;
+        so.isRestricted   = isRestricted;
+        AssetDatabase.CreateAsset(so, path);
+        return so;
     }
 
     [MenuItem("AirportSim/Setup 1E - Build Menu", true)]
@@ -369,7 +513,7 @@ public static class AirportSceneSetup
 
         var towerSO = UpsertBuildingData(
             "Assets/_Game/ScriptableObjects/Buildings/ControlTower.asset",
-            "Control Tower", BuildingCategory.Service, BuildingType.ControlTower,
+            "Control Tower", BuildingCategory.ControlTower, BuildingType.ControlTower,
             50_000f, new Vector2Int(1, 1), 4f, towerPrefab,
             new Color(0.85f, 0.20f, 0.20f));
 

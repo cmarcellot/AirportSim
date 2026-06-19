@@ -1,92 +1,79 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using Sirenix.OdinInspector;
 
-public enum ZoneType { None, Airside, Landside, Restricted }
-
 public class ZoneSystem : MonoBehaviour
 {
-    [FoldoutGroup("Zone System")]
-    [SerializeField] private float cellSize = 4f;
-    [FoldoutGroup("Zone System")]
-    [SerializeField] private Vector2Int gridDimensions = new Vector2Int(128, 128);
+    [FoldoutGroup("Zone Settings")] [SerializeField] private int gridWidth  = 128;
+    [FoldoutGroup("Zone Settings")] [SerializeField] private int gridHeight = 128;
 
-    [FoldoutGroup("Zone System")]
-    [SerializeField] private Color airsideColor    = new Color(0.20f, 0.50f, 1.00f, 0.14f);
-    [FoldoutGroup("Zone System")]
-    [SerializeField] private Color landsideColor   = new Color(0.20f, 0.80f, 0.20f, 0.14f);
-    [FoldoutGroup("Zone System")]
-    [SerializeField] private Color restrictedColor = new Color(1.00f, 0.30f, 0.30f, 0.14f);
+    [ShowInInspector, ReadOnly, FoldoutGroup("Zone Settings")]
+    private Dictionary<ZoneType, int> _counts = new();
 
-    [ShowInInspector, ReadOnly, FoldoutGroup("Zone System")]
-    private bool _showZones;
+    public event Action OnZoneChanged;
 
-    private GridSystem _grid;
+    private ZoneType?[,] _grid;
 
-    private void Awake() => _grid = FindAnyObjectByType<GridSystem>();
+    private void Awake()
+    {
+        _grid = new ZoneType?[gridWidth, gridHeight];
+        foreach (ZoneType t in Enum.GetValues(typeof(ZoneType))) _counts[t] = 0;
+    }
 
     // ── API publique ───────────────────────────────────────────────────────
 
-    public ZoneType GetZone(Vector2Int cell)
+    public void SetZone(Vector2Int cell, ZoneType? type)
     {
-        if (_grid == null) return ZoneType.None;
-        return Classify(_grid.GetCell(cell).Building);
+        if (!InBounds(cell.x, cell.y)) return;
+        UpdateCount(_grid[cell.x, cell.y], type);
+        _grid[cell.x, cell.y] = type;
+        OnZoneChanged?.Invoke();
     }
 
-    [Button("Toggle Zone Visualization"), FoldoutGroup("Zone System")]
-    public void ToggleZoneVisualization() => _showZones = !_showZones;
-
-    // ── Classification ─────────────────────────────────────────────────────
-
-    public static ZoneType Classify(BuildingType b) => b switch
+    public void SetZoneBatch(IEnumerable<Vector2Int> cells, ZoneType? type)
     {
-        BuildingType.Runway or BuildingType.Taxiway or BuildingType.Apron or
-        BuildingType.Gate   or BuildingType.ControlTower or BuildingType.Hangar or
-        BuildingType.FuelStation or BuildingType.CargoArea
-            => ZoneType.Airside,
-
-        BuildingType.SecurityCheckpoint or BuildingType.Customs or
-        BuildingType.BoardingLounge
-            => ZoneType.Restricted,
-
-        BuildingType.Terminal or BuildingType.Hall or BuildingType.CheckIn or
-        BuildingType.Shop or BuildingType.Restaurant or BuildingType.Parking or
-        BuildingType.RoadAccess or BuildingType.BusStop or BuildingType.TaxiZone
-            => ZoneType.Landside,
-
-        _ => ZoneType.None
-    };
-
-    // ── Gizmos (éditeur) ───────────────────────────────────────────────────
-
-    private void OnDrawGizmos()
-    {
-        if (!_showZones || _grid == null) return;
-
-        float s = cellSize * 0.9f;
-        for (int x = 0; x < gridDimensions.x; x++)
-        for (int z = 0; z < gridDimensions.y; z++)
+        bool changed = false;
+        foreach (var cell in cells)
         {
-            var cell = new Vector2Int(x, z);
-            var zone = GetZone(cell);
-            if (zone == ZoneType.None) continue;
-
-            Gizmos.color = zone switch
-            {
-                ZoneType.Airside    => airsideColor,
-                ZoneType.Landside   => landsideColor,
-                ZoneType.Restricted => restrictedColor,
-                _                   => Color.clear,
-            };
-            Gizmos.DrawCube(CellToWorld(cell) + Vector3.up * 0.05f,
-                            new Vector3(s, 0.01f, s));
+            if (!InBounds(cell.x, cell.y)) continue;
+            UpdateCount(_grid[cell.x, cell.y], type);
+            _grid[cell.x, cell.y] = type;
+            changed = true;
         }
+        if (changed) OnZoneChanged?.Invoke();
     }
 
-    private Vector3 CellToWorld(Vector2Int cell)
+    public ZoneType? GetZone(Vector2Int cell)
+        => InBounds(cell.x, cell.y) ? _grid[cell.x, cell.y] : null;
+
+    public bool IsZone(Vector2Int cell, ZoneType type)
+        => GetZone(cell) == type;
+
+    public List<Vector2Int> GetAllCellsOfZone(ZoneType type)
     {
-        float hw = gridDimensions.x * cellSize * 0.5f;
-        float hh = gridDimensions.y * cellSize * 0.5f;
-        return new Vector3((cell.x + 0.5f) * cellSize - hw, 0f,
-                           (cell.y + 0.5f) * cellSize - hh);
+        var result = new List<Vector2Int>();
+        for (int x = 0; x < gridWidth;  x++)
+        for (int z = 0; z < gridHeight; z++)
+            if (_grid[x, z] == type) result.Add(new Vector2Int(x, z));
+        return result;
+    }
+
+    [Button("Clear All Zones"), FoldoutGroup("Zone Settings")]
+    public void ClearAllZones()
+    {
+        _grid = new ZoneType?[gridWidth, gridHeight];
+        foreach (ZoneType t in Enum.GetValues(typeof(ZoneType))) _counts[t] = 0;
+        OnZoneChanged?.Invoke();
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private bool InBounds(int x, int z) => x >= 0 && x < gridWidth && z >= 0 && z < gridHeight;
+
+    private void UpdateCount(ZoneType? old, ZoneType? next)
+    {
+        if (old.HasValue)  _counts[old.Value]  = Mathf.Max(0, _counts[old.Value]  - 1);
+        if (next.HasValue) _counts[next.Value] = _counts[next.Value] + 1;
     }
 }
