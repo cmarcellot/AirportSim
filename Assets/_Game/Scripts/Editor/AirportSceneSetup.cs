@@ -213,6 +213,80 @@ public static class AirportSceneSetup
 
     // ── Étape 1D ──────────────────────────────────────────────────────────────
 
+    [MenuItem("AirportSim/Setup 2A - Pathfinding", true)]
+    public static bool Setup2AValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 2A - Pathfinding")]
+    public static void Setup2A()
+    {
+        EnsureFolder("Assets/_Game/Prefabs",         "Buildings");
+        EnsureFolder("Assets/_Game/ScriptableObjects","Buildings");
+
+        // ── Matériau taxiway (gris foncé) ─────────────────────────────────
+        var taxiwayMat = CreateOpaqueMat(
+            "Assets/_Game/Materials/TaxiwayMat.mat",
+            new Color(0.22f, 0.22f, 0.22f));
+        AssetDatabase.SaveAssets();
+
+        // ── Prefab : cube plat (height contrôlé par BuildingData.height) ──
+        var taxiwayPrefab = CreateCubePrefab(
+            "Assets/_Game/Prefabs/Buildings/Taxiway.prefab", taxiwayMat);
+
+        // ── BuildingData Taxiway ───────────────────────────────────────────
+        var taxiwaySO = UpsertBuildingData(
+            "Assets/_Game/ScriptableObjects/Buildings/Taxiway.asset",
+            "Taxiway", BuildingCategory.Runway, BuildingType.Taxiway,
+            5_000f, new Vector2Int(1, 1), 0.1f, taxiwayPrefab,
+            new Color(0.22f, 0.22f, 0.22f));
+        AssetDatabase.SaveAssets();
+
+        // ── Ajoute Taxiway au menu de construction ─────────────────────────
+        var menu = Object.FindAnyObjectByType<BuildMenuController>();
+        if (menu != null)
+        {
+            var menuSO   = new SerializedObject(menu);
+            var listProp = menuSO.FindProperty("availableBuildings");
+
+            // Vérifie que Taxiway n'est pas déjà dans la liste
+            bool alreadyAdded = false;
+            for (int i = 0; i < listProp.arraySize; i++)
+                if (listProp.GetArrayElementAtIndex(i).objectReferenceValue == taxiwaySO)
+                { alreadyAdded = true; break; }
+
+            if (!alreadyAdded)
+            {
+                listProp.arraySize++;
+                listProp.GetArrayElementAtIndex(listProp.arraySize - 1).objectReferenceValue = taxiwaySO;
+                menuSO.ApplyModifiedProperties();
+            }
+        }
+        else
+        {
+            Debug.LogWarning("[AirportSim] BuildMenuController introuvable — lance d'abord Setup 1E.");
+        }
+
+        // ── TaxiwayGraph dans la scène ─────────────────────────────────────
+        if (Object.FindAnyObjectByType<TaxiwayGraph>() != null)
+        {
+            EditorUtility.DisplayDialog("AirportSim", "Un TaxiwayGraph existe déjà dans la scène.", "OK");
+            return;
+        }
+
+        var graphGo = new GameObject("Taxiway Graph");
+        graphGo.AddComponent<TaxiwayGraph>();
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        AssetDatabase.Refresh();
+
+        Debug.Log("[AirportSim] Setup 2A terminé — TaxiwayGraph ajouté.");
+        EditorUtility.DisplayDialog("AirportSim",
+            "Setup 2A terminé !\n\n" +
+            "• Bâtiment Taxiway ajouté au menu (onglet Pistes)\n" +
+            "• TaxiwayGraph ajouté à la scène\n\n" +
+            "En Play : pose des Taxiways, le graphe se reconstruit automatiquement.\n" +
+            "Inspector TaxiwayGraph → Pathfinding Debug → Compute Debug Path pour tester.", "OK");
+    }
+
     [MenuItem("AirportSim/Setup 1E - Build Menu", true)]
     public static bool Setup1EValidate() => !Application.isPlaying;
 

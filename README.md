@@ -72,6 +72,14 @@ Assets/
 - Bouton grisé si budget insuffisant, surligné si sélectionné
 - Échap pour désélectionner · DOTween slide-from-bottom + punch au clic
 
+### Étape 2A — Pathfinding au sol (taxiway) ✅ `v0.7.0`
+- Bâtiment Taxiway (1×1, 5 000 $) ajouté au menu onglet Pistes
+- `TaxiwayGraph` : graphe de nœuds A* sur les cellules Taxiway + Runway
+- Reconstruction automatique toutes les 0,5 s si la grille change
+- API publique : `FindPath(Vector3 start, Vector3 end) → List<Vector3>`
+- Gizmos éditeur : nœuds verts, connexions blanches, chemin debug jaune
+- Inspector : `NodeCount`, boutons "Rebuild Graph" et "Compute Debug Path"
+
 ## Lancer le projet
 
 1. Ouvrir le projet dans Unity 6
@@ -80,8 +88,9 @@ Assets/
 4. Menu **AirportSim → Add HUD to Scene**
 5. Menu **AirportSim → Setup 1D - Build System**
 6. Menu **AirportSim → Setup 1E - Build Menu**
-7. Sauvegarder (`Ctrl+S`)
-8. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
+7. Menu **AirportSim → Setup 2A - Pathfinding**
+8. Sauvegarder (`Ctrl+S`)
+9. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
 ## Contrôles
 
