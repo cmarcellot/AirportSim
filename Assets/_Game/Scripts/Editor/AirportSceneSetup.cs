@@ -6,6 +6,9 @@ public static class AirportSceneSetup
 {
     private const string ScenePath = "Assets/_Game/Scenes/Airport.unity";
 
+    [MenuItem("AirportSim/Create Airport Scene", true)]
+    public static bool CreateAirportSceneValidate() => !Application.isPlaying;
+
     [MenuItem("AirportSim/Create Airport Scene")]
     public static void CreateAirportScene()
     {
@@ -22,10 +25,10 @@ public static class AirportSceneSetup
         light.intensity = 1f;
         lightGo.transform.eulerAngles = new Vector3(50f, -30f, 0f);
 
-        // Sol 128x128 (Plane Unity = 10x10, scale 12.8)
+        // Sol 512x512 — 128 cellules × 4u (Plane Unity = 10x10, scale 51.2)
         var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
         ground.name = "Ground";
-        ground.transform.localScale = new Vector3(12.8f, 1f, 12.8f);
+        ground.transform.localScale = new Vector3(51.2f, 1f, 51.2f);
 
         const string matPath = "Assets/_Game/Materials/Ground.mat";
         var groundMat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
@@ -37,16 +40,16 @@ public static class AirportSceneSetup
         }
         ground.GetComponent<MeshRenderer>().sharedMaterial = groundMat;
 
-        // Caméra RTS — pitch 45°, Y=20, Z=-20 pour centrer la vue sur l'origine
+        // Caméra RTS — pitch 45°, Y=40, Z=-40 pour centrer la vue sur l'origine (carte 512×512)
         var cameraGo = new GameObject("RTS Camera");
         var cam = cameraGo.AddComponent<Camera>();
         cam.orthographic = true;
-        cam.orthographicSize = 15f;
+        cam.orthographicSize = 30f;
         cam.nearClipPlane = 0.3f;
-        cam.farClipPlane = 500f;
+        cam.farClipPlane = 1500f;
         cameraGo.AddComponent<AudioListener>();
         cameraGo.transform.SetPositionAndRotation(
-            new Vector3(0f, 20f, -20f),
+            new Vector3(0f, 40f, -40f),
             Quaternion.Euler(45f, 0f, 0f)
         );
         cameraGo.AddComponent<RTSCamera>();
@@ -56,6 +59,31 @@ public static class AirportSceneSetup
 
         Debug.Log("[AirportSim] Scène créée : " + ScenePath);
         EditorUtility.DisplayDialog("AirportSim", "Scène créée :\n" + ScenePath, "OK");
+    }
+
+    [MenuItem("AirportSim/Add Grid System to Scene", true)]
+    public static bool AddGridSystemValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Add Grid System to Scene")]
+    public static void AddGridSystem()
+    {
+        // Cherche un GridSystem existant pour ne pas en créer deux
+        var existing = UnityEngine.Object.FindFirstObjectByType<GridSystem>();
+        if (existing != null)
+        {
+            EditorUtility.DisplayDialog("AirportSim", "Un GridSystem existe déjà dans la scène.", "OK");
+            return;
+        }
+
+        var go = new GameObject("Grid System");
+        go.AddComponent<GridSystem>();
+
+        // Sauvegarde la scène active
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene();
+        UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
+
+        Debug.Log("[AirportSim] GridSystem ajouté à la scène.");
+        EditorUtility.DisplayDialog("AirportSim", "GridSystem ajouté.\nSauvegarde la scène (Ctrl+S).", "OK");
     }
 
     private static void EnsureFolder(string parent, string name)

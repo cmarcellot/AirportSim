@@ -7,22 +7,22 @@ using Sirenix.OdinInspector;
 public class RTSCamera : MonoBehaviour
 {
     [FoldoutGroup("Movement")]
-    [SerializeField] private float moveSpeed = 20f;
+    [SerializeField] private float moveSpeed = 100f;
 
     [FoldoutGroup("Movement")]
-    [SerializeField] private Vector2 mapBounds = new Vector2(128f, 128f);
+    [SerializeField] private Vector2 mapBounds = new Vector2(512f, 512f);
 
     [FoldoutGroup("Zoom")]
-    [SerializeField] private float zoomSpeed = 10f;
+    [SerializeField] private float zoomSpeed = 25f;
 
     [FoldoutGroup("Zoom")]
     [SerializeField] private float minOrthoSize = 5f;
 
     [FoldoutGroup("Zoom")]
-    [SerializeField] private float maxOrthoSize = 20f;
+    [SerializeField] private float maxOrthoSize = 250f;
 
     [FoldoutGroup("Zoom")]
-    [SerializeField] private float zoomDuration = 0.25f;
+    [SerializeField] private float zoomDuration = 2.5f;
 
     [FoldoutGroup("Rotation")]
     [SerializeField] private float rotationDuration = 0.3f;
@@ -32,7 +32,7 @@ public class RTSCamera : MonoBehaviour
     private bool _isRotating;
 
     private const float PitchAngle = 45f;
-    private const float CameraHeight = 20f;
+    private const float CameraHeight = 40f;
 
     private void Awake()
     {
