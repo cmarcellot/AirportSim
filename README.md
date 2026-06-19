@@ -80,7 +80,7 @@ Assets/
 - Gizmos éditeur : nœuds verts, connexions blanches, chemin debug jaune
 - Inspector : `NodeCount`, boutons "Rebuild Graph" et "Compute Debug Path"
 
-### Étape 2A v2 — Zones & Pathfinding dual ✅ `v0.8.0`
+### Étape 2A v2 — Zones & Pathfinding dual ✅ `v0.7.1`
 - 15 bâtiments (6 Piste · 6 Terminal · 3 Accès) avec préfabs cubes colorés
 - Menu de construction mis à jour : onglets **Tous / Piste / Terminal / Accès**
 - `ZoneSystem` : classification Airside / Landside / Restricted par cellule, visualisation Gizmos colorés (bouton Toggle dans l'Inspector)
