@@ -271,7 +271,8 @@ public class Aircraft : MonoBehaviour
                 rotated = true;
                 // Rotation nez vers le haut (pitch −15°, cap est Y=90°)
                 transform.DORotateQuaternion(Quaternion.Euler(-15f, 90f, 0f), 2f)
-                         .SetEase(Ease.InOutSine);
+                         .SetEase(Ease.InOutSine)
+                         .SetLink(gameObject);
                 Camera.main?.transform.DOShakePosition(0.8f, 0.4f, 10, 90f, false);
             }
 
@@ -391,7 +392,8 @@ public class Aircraft : MonoBehaviour
         go.transform.DOLocalRotate(
             new Vector3(360f, 0f, 0f), 0.18f, RotateMode.FastBeyond360)
            .SetLoops(-1, LoopType.Restart)
-           .SetEase(Ease.Linear);
+           .SetEase(Ease.Linear)
+           .SetLink(go);
     }
 
     private void CreateNavLight(Vector3 localPos, Color color, float blinkOffset)
@@ -410,12 +412,13 @@ public class Aircraft : MonoBehaviour
         var offColor = new Color(color.r * 0.05f, color.g * 0.05f, color.b * 0.05f);
         DOVirtual.DelayedCall(blinkOffset, () =>
         {
+            if (go == null) return;
             DOTween.To(
                 () => mat.GetColor("_BaseColor"),
                 c  => mat.SetColor("_BaseColor", c),
                 offColor, 0.1f
-            ).SetLoops(-1, LoopType.Yoyo).SetEase(Ease.Flash);
-        });
+            ).SetLoops(-1, LoopType.Yoyo).SetEase(Ease.Flash).SetLink(go);
+        }).SetLink(go);
     }
 
     // ── Fumée d'atterrissage ───────────────────────────────────────────────
