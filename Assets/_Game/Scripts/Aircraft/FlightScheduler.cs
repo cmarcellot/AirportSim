@@ -128,6 +128,14 @@ public class FlightScheduler : MonoBehaviour
         { Debug.LogWarning("[FlightScheduler] AircraftData non assigné."); return; }
         if (_zones == null) _zones = FindAnyObjectByType<ZoneSystem>();
 
+        // Ne pas faire atterrir si aucune gate n'est disponible
+        var gates = FindObjectsByType<Gate>(FindObjectsSortMode.None);
+        if (gates.Length > 0 && System.Array.TrueForAll(gates, g => !g.IsAvailable()))
+        {
+            Debug.Log("[FlightScheduler] Toutes les gates occupées — atterrissage suspendu.");
+            return;
+        }
+
         PurgeDestroyedAircraft();
 
         var runways = FindRunways();
