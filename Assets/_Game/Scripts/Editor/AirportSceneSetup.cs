@@ -739,6 +739,99 @@ public static class AirportSceneSetup
         Debug.Log("[AirportSim] EventSystem ajouté (InputSystemUIInputModule).");
     }
 
+    // ── Setup 2B — Premier avion ───────────────────────────────────────────
+
+    [MenuItem("AirportSim/Setup 2B - Flight System", true)]
+    public static bool Setup2BValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 2B - Flight System")]
+    public static void Setup2B()
+    {
+        // ── Dossiers ──────────────────────────────────────────────────────
+        EnsureFolder("Assets/_Game/Prefabs",          "Aircraft");
+        EnsureFolder("Assets/_Game/ScriptableObjects", "Aircraft");
+
+        // ── Prefab avion (corps + ailes + dérive) ─────────────────────────
+        var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        mat.color = Color.white;
+
+        var root  = new GameObject("Boeing737");
+
+        var body  = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        body.name = "Body";
+        body.transform.SetParent(root.transform);
+        body.transform.localScale = new Vector3(20f, 2f, 4f);
+        body.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        Object.DestroyImmediate(body.GetComponent<BoxCollider>());
+
+        var wings  = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        wings.name = "Wings";
+        wings.transform.SetParent(root.transform);
+        wings.transform.localPosition = new Vector3(0f, -0.4f, 0f);
+        wings.transform.localScale    = new Vector3(5f, 0.4f, 18f);
+        wings.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        Object.DestroyImmediate(wings.GetComponent<BoxCollider>());
+
+        var tail   = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        tail.name  = "Tail";
+        tail.transform.SetParent(root.transform);
+        tail.transform.localPosition = new Vector3(-8f, 2f, 0f);
+        tail.transform.localScale    = new Vector3(3f, 3f, 0.6f);
+        tail.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        Object.DestroyImmediate(tail.GetComponent<BoxCollider>());
+
+        const string prefabPath = "Assets/_Game/Prefabs/Aircraft/Boeing737.prefab";
+        bool         prefabNew  = !System.IO.File.Exists(
+            System.IO.Path.Combine(Application.dataPath.Replace("Assets",""), prefabPath));
+        var prefabAsset = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
+
+        // ── AircraftData ScriptableObject ─────────────────────────────────
+        const string dataPath = "Assets/_Game/ScriptableObjects/Aircraft/Boeing737.asset";
+        var data = AssetDatabase.LoadAssetAtPath<AircraftData>(dataPath);
+        if (data == null)
+        {
+            data = ScriptableObject.CreateInstance<AircraftData>();
+            AssetDatabase.CreateAsset(data, dataPath);
+        }
+        data.aircraftName       = "Boeing 737";
+        data.approachSpeed      = 80f;
+        data.landingSpeed       = 30f;
+        data.taxiSpeed          = 10f;
+        data.size               = new Vector2Int(10, 2);
+        data.passengerCapacity  = 150f;
+        data.prefab             = prefabAsset;
+        EditorUtility.SetDirty(data);
+        AssetDatabase.SaveAssets();
+
+        // ── FlightScheduler dans la scène ─────────────────────────────────
+        var existing = Object.FindAnyObjectByType<FlightScheduler>();
+        if (existing == null)
+        {
+            var go = new GameObject("Flight Scheduler");
+            var fs = go.AddComponent<FlightScheduler>();
+            // Assigner via SerializedObject pour respecter [SerializeField]
+            var so = new UnityEditor.SerializedObject(fs);
+            so.FindProperty("aircraftData").objectReferenceValue = data;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+        else
+        {
+            var so = new UnityEditor.SerializedObject(existing);
+            so.FindProperty("aircraftData").objectReferenceValue = data;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        EditorUtility.DisplayDialog("AirportSim",
+            "Setup 2B terminé !\n\n" +
+            "• Prefab Boeing737 créé\n" +
+            "• AircraftData configuré\n" +
+            "• FlightScheduler ajouté à la scène\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.\n" +
+            "Utilisez [Spawn Test Aircraft] dans l'Inspector pour tester.", "OK");
+    }
+
     // ── Setup 2A-bis — Environnement prédéfini ─────────────────────────────
 
     [MenuItem("AirportSim/Setup 2A-bis - Airport Environment", true)]

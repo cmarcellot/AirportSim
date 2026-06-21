@@ -95,6 +95,16 @@ Assets/
   - API : `FindAirsidePath` / `FindLandsidePath`
 - **Menu de construction** : onglets **Zones** (peinture) | **Bâtiments** (pose) — 5 bâtiments : ControlTower · Gate · FuelStation · Shop · Restaurant
 
+### Étape 2B — Premier avion ✅ `v0.8.0`
+- **AircraftData** (ScriptableObject) : nom, vitesse approche/atterro/taxi, capacité, prefab
+- **Aircraft** : machine à états `Approaching → Landing → Idle`, séquence DOTween complète
+  - Spawn 500 u hors carte, descente alt 80 → 0, atterrissage + freinage sur piste
+  - Trainée de fumée au toucher des roues (ParticleSystem burst)
+  - Légère secousse caméra à l'atterrissage (`DOShakePosition`)
+  - Disparaît après 90 s pour libérer la piste
+- **FlightScheduler** : détecte les pistes via ZoneSystem, fait apparaître un avion toutes les 2 min de jeu (respecte `SpeedMultiplier`), `[Button] Spawn Test Aircraft`
+- **Prefab Boeing 737** : corps + ailes + dérive (cubes blancs)
+
 ### Étape 2A-bis — Environnement de base prédéfini ✅ `v0.7.3`
 - **AirportEnvironment** : génère automatiquement un layout d'aéroport au démarrage via ZoneSystem
   - Parking (20×16 cellules) en bas, relié au terminal par une route d'accès
@@ -115,9 +125,10 @@ Assets/
 5. Menu **AirportSim → Setup 1D - Build System**
 6. Menu **AirportSim → Setup 1E - Build Menu**
 7. Menu **AirportSim → Setup 2A - Pathfinding**
-8. Menu **AirportSim → Setup 2A-bis - Airport Environment**
-9. Sauvegarder (`Ctrl+S`)
-10. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
+8. Menu **AirportSim → Setup 2B - Flight System**
+9. Menu **AirportSim → Setup 2A-bis - Airport Environment**
+10. Sauvegarder (`Ctrl+S`)
+11. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
 ## Contrôles
 
