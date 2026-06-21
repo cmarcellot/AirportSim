@@ -95,6 +95,14 @@ Assets/
   - API : `FindAirsidePath` / `FindLandsidePath`
 - **Menu de construction** : onglets **Zones** (peinture) | **Bâtiments** (pose) — 5 bâtiments : ControlTower · Gate · FuelStation · Shop · Restaurant
 
+### Étape 2C — Taxi vers la gate ✅ `v0.8.1`
+- **Gate** : état Available/Occupied, indicateur disque coloré (vert/rouge) flottant avec pulsation DOTween
+- **Taxi PathfindingSystem** : après atterrissage, FlightScheduler cherche une gate libre, calcule le chemin via `FindAirsidePath()`, l'avion suit les waypoints cellule par cellule
+- **Connexion taxiway→piste** : FlightScheduler peint automatiquement les cellules manquantes entre taxiways et pistes au démarrage (gap de 2 cellules comblé)
+- **Rotation fluide** dans les virages (DORotateQuaternion + Ease.InOutSine)
+- **Effets visuels** : disques moteurs en rotation continue (DOLocalRotate FastBeyond360), feux de navigation rouge/vert clignotants (DOTween Yoyo)
+- La piste est libérée dès que l'avion commence à rouler → avion suivant peut atterrir
+
 ### Étape 2B — Premier avion ✅ `v0.8.0`
 - **AircraftData** (ScriptableObject) : nom, vitesse approche/atterro/taxi, capacité, prefab
 - **Aircraft** : machine à états `Approaching → Landing → Idle`, séquence DOTween complète
@@ -126,6 +134,7 @@ Assets/
 6. Menu **AirportSim → Setup 1E - Build Menu**
 7. Menu **AirportSim → Setup 2A - Pathfinding**
 8. Menu **AirportSim → Setup 2B - Flight System**
+9. Menu **AirportSim → Setup 2C - Gates and Taxi**
 9. Menu **AirportSim → Setup 2A-bis - Airport Environment**
 10. Sauvegarder (`Ctrl+S`)
 11. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**

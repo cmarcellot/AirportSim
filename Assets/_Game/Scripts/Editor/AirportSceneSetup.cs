@@ -739,6 +739,44 @@ public static class AirportSceneSetup
         Debug.Log("[AirportSim] EventSystem ajouté (InputSystemUIInputModule).");
     }
 
+    // ── Setup 2C — Gates & Taxi ────────────────────────────────────────────
+
+    [MenuItem("AirportSim/Setup 2C - Gates and Taxi", true)]
+    public static bool Setup2CValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 2C - Gates and Taxi")]
+    public static void Setup2C()
+    {
+        // Supprimer les gates existantes
+        foreach (var g in Object.FindObjectsByType<Gate>(FindObjectsSortMode.None))
+            Object.DestroyImmediate(g.gameObject);
+
+        // 5 gates au bord sud de l'Apron (Z≈14, X espacés de 20 u)
+        // Apron world : X [-60, 60], Z [8, 88] → on place à Z=14 (Y cell 67)
+        var positions = new Vector3[]
+        {
+            new(-40f, 0f, 14f),
+            new(-20f, 0f, 14f),
+            new(  0f, 0f, 14f),
+            new( 20f, 0f, 14f),
+            new( 40f, 0f, 14f),
+        };
+
+        for (int i = 0; i < positions.Length; i++)
+        {
+            var go = new GameObject($"Gate_{i + 1}");
+            go.transform.position = positions[i];
+            go.AddComponent<Gate>();
+        }
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        EditorUtility.DisplayDialog("AirportSim",
+            "Setup 2C terminé !\n\n" +
+            "• 5 gates placées dans l'Apron\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.\n" +
+            "L'avion taxi automatiquement vers une gate après atterrissage.", "OK");
+    }
+
     // ── Setup 2B — Premier avion ───────────────────────────────────────────
 
     [MenuItem("AirportSim/Setup 2B - Flight System", true)]

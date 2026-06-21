@@ -1,18 +1,20 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Sirenix.OdinInspector;
 
 /// <summary>
-/// Fait apparaître des avions à intervalles réguliers sur les pistes disponibles.
+/// Fait apparaître des avions à intervalles réguliers, les assigne aux pistes
+/// disponibles, puis gère le taxi vers une gate via PathfindingSystem.
 /// </summary>
 public class FlightScheduler : MonoBehaviour
 {
-    // ── Données du vol ─────────────────────────────────────────────────────
+    // ── Config ─────────────────────────────────────────────────────────────
     [FoldoutGroup("Flight Scheduler")]
     [SerializeField] private AircraftData aircraftData;
 
     [FoldoutGroup("Flight Scheduler")]
-    [Tooltip("Intervalle entre deux arrivées (minutes de jeu). 1 minute de jeu = 1 seconde réelle × SpeedMultiplier")]
+    [Tooltip("Intervalle entre deux arrivées (minutes de jeu)")]
     [SerializeField] private float spawnIntervalMinutes = 2f;
 
     // ── Stats ──────────────────────────────────────────────────────────────
@@ -23,39 +25,46 @@ public class FlightScheduler : MonoBehaviour
     private int _totalSpawned;
 
     // ── Runtime ────────────────────────────────────────────────────────────
-    private ZoneSystem          _zones;
-    private const float         CellSize = 4f;
-    private const float         HalfGrid = 128 * CellSize * 0.5f; // 256
+    private ZoneSystem        _zones;
+    private PathfindingSystem _pathfinding;
+    private bool              _ready;
 
-    // Clé = CenterZ de la piste, valeur = avion en cours (null = libre)
+    private const float CellSize = 4f;
+    private const float HalfGrid = 128 * CellSize * 0.5f; // 256
+
     private readonly Dictionary<float, Aircraft> _runwayOccupants = new();
 
-    // ── Struct piste ───────────────────────────────────────────────────────
     private struct RunwayInfo
     {
-        public float StartX;   // seuil ouest (world)
-        public float EndX;     // seuil est (world)
-        public float CenterZ;  // axe central (world)
+        public float StartX, EndX, CenterZ;
     }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
     private void Awake()
     {
-        _zones = FindAnyObjectByType<ZoneSystem>();
+        _zones       = FindAnyObjectByType<ZoneSystem>();
+        _pathfinding = FindAnyObjectByType<PathfindingSystem>();
     }
 
-    private void Start()
+    private IEnumerator Start()
     {
-        // Premier avion après un court délai pour laisser AirportEnvironment peindre les zones
+        // Attendre une frame que AirportEnvironment.Start() ait peint les zones
+        yield return null;
+
+        if (_zones != null) PaintRunwayConnectors();
+
+        // Premier avion quasi-immédiatement
         _timerMinutes = spawnIntervalMinutes - 0.1f;
+        _ready        = true;
     }
 
     private void Update()
     {
-        // Avance le timer en minutes de jeu (1 sec réelle × SpeedMultiplier = N min de jeu)
+        if (!_ready) return;
+
         float spd = TimeManager.Instance != null ? TimeManager.Instance.SpeedMultiplier : 1;
-        _timerMinutes += Time.deltaTime * spd; // 1 réelle × spd = spd minutes de jeu
+        _timerMinutes += Time.deltaTime * spd;
 
         if (_timerMinutes >= spawnIntervalMinutes)
         {
@@ -64,81 +73,154 @@ public class FlightScheduler : MonoBehaviour
         }
     }
 
-    // ── API ────────────────────────────────────────────────────────────────
+    // ── API publique ───────────────────────────────────────────────────────
 
     [Button("Spawn Test Aircraft"), FoldoutGroup("Flight Scheduler")]
     public void SpawnTestAircraft()
     {
         if (!Application.isPlaying)
-        {
-            Debug.LogWarning("[FlightScheduler] Spawn disponible uniquement en mode Play.");
-            return;
-        }
+        { Debug.LogWarning("[FlightScheduler] Disponible uniquement en Play."); return; }
         TrySpawnAircraft();
     }
 
-    // ── Logique de spawn ───────────────────────────────────────────────────
+    /// <summary>Cherche une gate libre et déclenche le taxi de l'avion.</summary>
+    public void AssignGateToAircraft(Aircraft aircraft)
+    {
+        if (aircraft == null) return;
+
+        var gates = FindObjectsByType<Gate>(FindObjectsSortMode.None);
+        Gate chosen = null;
+        foreach (var g in gates)
+            if (g.IsAvailable()) { chosen = g; break; }
+
+        if (chosen == null)
+        {
+            Debug.Log("[FlightScheduler] Aucune gate disponible — l'avion reste sur la piste.");
+            return;
+        }
+
+        chosen.Reserve(); // réservée avant que l'avion n'arrive
+
+        List<Vector3> path = null;
+        if (_pathfinding != null)
+            path = _pathfinding.FindAirsidePath(aircraft.transform.position, chosen.transform.position);
+
+        if (path == null || path.Count == 0)
+        {
+            Debug.LogWarning($"[FlightScheduler] Pas de chemin airside vers {chosen.name}. " +
+                             "Vérifiez que les zones Runway/Taxiway/Apron sont connectées.");
+            chosen.ReleaseAircraft();
+            return;
+        }
+
+        // La piste est libérée dès que l'avion commence à rouler
+        FreeRunwayOf(aircraft);
+        aircraft.StartTaxi(path, chosen);
+
+        Debug.Log($"[FlightScheduler] {aircraft.name} → {chosen.name} ({path.Count} waypoints)");
+    }
+
+    // ── Spawn ──────────────────────────────────────────────────────────────
 
     private void TrySpawnAircraft()
     {
         if (aircraftData == null)
-        {
-            Debug.LogWarning("[FlightScheduler] AircraftData non assigné.");
-            return;
-        }
+        { Debug.LogWarning("[FlightScheduler] AircraftData non assigné."); return; }
         if (_zones == null) _zones = FindAnyObjectByType<ZoneSystem>();
+
+        PurgeDestroyedAircraft();
 
         var runways = FindRunways();
         if (runways.Count == 0)
-        {
-            Debug.Log("[FlightScheduler] Aucune piste (Runway) trouvée dans ZoneSystem.");
-            return;
-        }
-
-        // Cherche une piste sans avion actif
-        PurgeDestroyedAircraft();
+        { Debug.Log("[FlightScheduler] Aucune piste Runway dans ZoneSystem."); return; }
 
         RunwayInfo? chosen = null;
         foreach (var rw in runways)
         {
             if (!_runwayOccupants.TryGetValue(rw.CenterZ, out var ac) || ac == null)
-            {
-                chosen = rw;
-                break;
-            }
+            { chosen = rw; break; }
         }
 
         if (chosen == null)
-        {
-            Debug.Log("[FlightScheduler] Toutes les pistes occupées, avion en attente.");
-            return;
-        }
+        { Debug.Log("[FlightScheduler] Toutes les pistes occupées."); return; }
 
         SpawnOn(chosen.Value);
     }
 
     private void SpawnOn(RunwayInfo runway)
     {
-        GameObject go;
-
-        if (aircraftData.prefab != null)
-        {
-            go = Instantiate(aircraftData.prefab);
-        }
-        else
-        {
-            go = BuildDefaultModel();
-        }
+        var go = aircraftData.prefab != null
+            ? Instantiate(aircraftData.prefab)
+            : BuildDefaultModel();
 
         go.name = $"Aircraft_{aircraftData.aircraftName}_{_totalSpawned}";
 
         var aircraft = go.AddComponent<Aircraft>();
+        aircraft.OnLanded += OnAircraftLanded;
         aircraft.Initialize(aircraftData, runway.StartX, runway.EndX, runway.CenterZ);
 
         _runwayOccupants[runway.CenterZ] = aircraft;
         _totalSpawned++;
 
         Debug.Log($"[FlightScheduler] {go.name} → piste Z={runway.CenterZ:0}");
+    }
+
+    // ── Callback atterrissage ──────────────────────────────────────────────
+
+    private void OnAircraftLanded(Aircraft aircraft)
+    {
+        aircraft.OnLanded -= OnAircraftLanded;
+        AssignGateToAircraft(aircraft);
+    }
+
+    // ── Connecteur de zones ────────────────────────────────────────────────
+    // Peint les cellules manquantes entre le haut des taxiways et le bas des pistes,
+    // ainsi qu'entre les bandes de pistes, afin de rendre le graphe airside connexe.
+
+    private void PaintRunwayConnectors()
+    {
+        var allRunway = _zones.GetAllCellsOfZone(ZoneType.Runway);
+        var allTaxi   = _zones.GetAllCellsOfZone(ZoneType.Taxiway);
+
+        if (allRunway == null || allRunway.Count == 0) return;
+        if (allTaxi   == null || allTaxi.Count   == 0) return;
+
+        // Borne supérieure des taxiways et plage X des colonnes verticales
+        int maxTaxiY = 0, minTaxiX = int.MaxValue, maxTaxiX = 0;
+        foreach (var c in allTaxi)
+        {
+            if (c.y > maxTaxiY) maxTaxiY = c.y;
+            if (c.x < minTaxiX) minTaxiX = c.x;
+            if (c.x > maxTaxiX) maxTaxiX = c.x;
+        }
+
+        // Borne supérieure des pistes (Y max toutes pistes)
+        int maxRunwayY = 0;
+        var runwayYSet = new HashSet<int>();
+        foreach (var c in allRunway)
+        {
+            if (c.y > maxRunwayY) maxRunwayY = c.y;
+            runwayYSet.Add(c.y);
+        }
+
+        if (maxRunwayY <= maxTaxiY) return; // déjà connecté
+
+        // Remplie tous les trous entre le sommet des taxiways et le sommet des pistes
+        var connectors = new List<Vector2Int>();
+        for (int y = maxTaxiY + 1; y <= maxRunwayY; y++)
+        {
+            if (!runwayYSet.Contains(y)) // c'est un trou
+            {
+                for (int x = minTaxiX; x <= maxTaxiX; x++)
+                    connectors.Add(new Vector2Int(x, y));
+            }
+        }
+
+        if (connectors.Count > 0)
+        {
+            _zones.SetZoneBatch(connectors, ZoneType.Taxiway);
+            Debug.Log($"[FlightScheduler] {connectors.Count} cellules taxiway connecteur peintes.");
+        }
     }
 
     // ── Détection des pistes ───────────────────────────────────────────────
@@ -151,10 +233,8 @@ public class FlightScheduler : MonoBehaviour
         var cells = _zones.GetAllCellsOfZone(ZoneType.Runway);
         if (cells == null || cells.Count == 0) return result;
 
-        // Trier par Y (profondeur Z dans le monde)
         cells.Sort((a, b) => a.y.CompareTo(b.y));
 
-        // Grouper les cellules adjacentes en bandes horizontales (= pistes)
         int i = 0;
         while (i < cells.Count)
         {
@@ -169,7 +249,6 @@ public class FlightScheduler : MonoBehaviour
                 i++;
             }
 
-            // Ignorer les petites zones (pas une vraie piste)
             if (bandMaxX - bandMinX < 8) continue;
 
             float worldMinX = bandMinX * CellSize - HalfGrid;
@@ -188,6 +267,16 @@ public class FlightScheduler : MonoBehaviour
         return result;
     }
 
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private void FreeRunwayOf(Aircraft aircraft)
+    {
+        float key = float.NaN;
+        foreach (var kvp in _runwayOccupants)
+            if (kvp.Value == aircraft) { key = kvp.Key; break; }
+        if (!float.IsNaN(key)) _runwayOccupants.Remove(key);
+    }
+
     private void PurgeDestroyedAircraft()
     {
         var toRemove = new List<float>();
@@ -197,25 +286,21 @@ public class FlightScheduler : MonoBehaviour
             _runwayOccupants.Remove(cz);
     }
 
-    // ── Modèle par défaut (cube allongé blanc) ────────────────────────────
-
     private static GameObject BuildDefaultModel()
     {
-        var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        var mat  = new Material(Shader.Find("Universal Render Pipeline/Lit"));
         mat.color = Color.white;
 
-        // Fuselage
-        var root   = new GameObject("AircraftModel");
-        var body   = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        body.name  = "Body";
+        var root = new GameObject("AircraftModel");
+
+        var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        body.name = "Body";
         body.transform.SetParent(root.transform);
-        body.transform.localPosition = Vector3.zero;
-        body.transform.localScale    = new Vector3(20f, 2f, 4f);
+        body.transform.localScale = new Vector3(20f, 2f, 4f);
         body.GetComponent<MeshRenderer>().sharedMaterial = mat;
         Object.Destroy(body.GetComponent<BoxCollider>());
 
-        // Ailes
-        var wings  = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        var wings = GameObject.CreatePrimitive(PrimitiveType.Cube);
         wings.name = "Wings";
         wings.transform.SetParent(root.transform);
         wings.transform.localPosition = new Vector3(0f, -0.4f, 0f);
@@ -223,9 +308,8 @@ public class FlightScheduler : MonoBehaviour
         wings.GetComponent<MeshRenderer>().sharedMaterial = mat;
         Object.Destroy(wings.GetComponent<BoxCollider>());
 
-        // Dérive (empennage vertical)
-        var tail   = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        tail.name  = "Tail";
+        var tail = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        tail.name = "Tail";
         tail.transform.SetParent(root.transform);
         tail.transform.localPosition = new Vector3(-8f, 2f, 0f);
         tail.transform.localScale    = new Vector3(3f, 3f, 0.6f);
