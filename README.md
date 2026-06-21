@@ -113,7 +113,7 @@ Assets/
 - **FlightScheduler** : détecte les pistes via ZoneSystem, fait apparaître un avion toutes les 2 min de jeu (respecte `SpeedMultiplier`), `[Button] Spawn Test Aircraft`
 - **Prefab Boeing 737** : corps + ailes + dérive (cubes blancs)
 
-### Étape 2D — Avion décollage ✅ `v1.0.0`
+### Étape 2D — Avion décollage ✅ `v0.10.0`
 - **Cycle complet d'un vol** : AtGate 3 min (jeu) → Departing → TaxiingToRunway → TakingOff → Departed
 - **Pushback** : DOTween recul depuis la gate (~20 u en sens inverse du cap d'arrivée)
 - **Taxi vers la piste** : `PathfindingSystem.FindAirsidePath()` depuis la position post-pushback jusqu'au seuil de piste — même logique de suivi de waypoints que le taxi à l'arrivée
