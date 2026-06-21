@@ -128,12 +128,24 @@ public class FlightScheduler : MonoBehaviour
         { Debug.LogWarning("[FlightScheduler] AircraftData non assigné."); return; }
         if (_zones == null) _zones = FindAnyObjectByType<ZoneSystem>();
 
-        // Ne pas faire atterrir si aucune gate n'est disponible
+        // Ne spawner que s'il y a plus de gates libres que d'avions déjà en approche
         var gates = FindObjectsByType<Gate>();
-        if (gates.Length > 0 && System.Array.TrueForAll(gates, g => !g.IsAvailable()))
+        if (gates.Length > 0)
         {
-            Debug.Log("[FlightScheduler] Toutes les gates occupées — atterrissage suspendu.");
-            return;
+            int freeGates = 0;
+            foreach (var g in gates) if (g.IsAvailable()) freeGates++;
+
+            int inbound = 0;
+            foreach (var ac in FindObjectsByType<Aircraft>())
+                if (ac.State == AircraftState.Approaching ||
+                    ac.State == AircraftState.Landing     ||
+                    ac.State == AircraftState.Idle) inbound++;
+
+            if (freeGates <= inbound)
+            {
+                Debug.Log($"[FlightScheduler] Gates libres ({freeGates}) ≤ avions en approche ({inbound}) — spawn suspendu.");
+                return;
+            }
         }
 
         PurgeDestroyedAircraft();
