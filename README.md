@@ -95,7 +95,7 @@ Assets/
   - API : `FindAirsidePath` / `FindLandsidePath`
 - **Menu de construction** : onglets **Zones** (peinture) | **Bâtiments** (pose) — 5 bâtiments : ControlTower · Gate · FuelStation · Shop · Restaurant
 
-### Étape 2C — Taxi vers la gate ✅ `v0.8.1`
+### Étape 2C — Taxi vers la gate ✅ `v0.9.0`
 - **Gate** : état Available/Occupied, indicateur disque coloré (vert/rouge) flottant avec pulsation DOTween
 - **Taxi PathfindingSystem** : après atterrissage, FlightScheduler cherche une gate libre, calcule le chemin via `FindAirsidePath()`, l'avion suit les waypoints cellule par cellule
 - **Connexion taxiway→piste** : FlightScheduler peint automatiquement les cellules manquantes entre taxiways et pistes au démarrage (gap de 2 cellules comblé)
