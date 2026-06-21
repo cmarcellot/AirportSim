@@ -113,6 +113,19 @@ Assets/
 - **FlightScheduler** : détecte les pistes via ZoneSystem, fait apparaître un avion toutes les 2 min de jeu (respecte `SpeedMultiplier`), `[Button] Spawn Test Aircraft`
 - **Prefab Boeing 737** : corps + ailes + dérive (cubes blancs)
 
+### Étape 2D — Avion décollage ✅ `v1.0.0`
+- **Cycle complet d'un vol** : AtGate 3 min (jeu) → Departing → TaxiingToRunway → TakingOff → Departed
+- **Pushback** : DOTween recul depuis la gate (~20 u en sens inverse du cap d'arrivée)
+- **Taxi vers la piste** : `PathfindingSystem.FindAirsidePath()` depuis la position post-pushback jusqu'au seuil de piste — même logique de suivi de waypoints que le taxi à l'arrivée
+- **Roulement et décollage** : accélération 0→130 u/s, rotation nez vers le haut à V1 (80 u/s), montée alt 0→80, disparition hors carte
+- **Gate libérée au départ** (pas à la destruction) → gate réutilisable immédiatement
+- **Revenus** : +50 000 $ via `EconomySystem.AddRevenue()` au décollage
+- **Notification UI** : "+50 000 $" vert gras TextMeshPro, montée + fondu DOTween sur le canvas HUD
+- **Traînée moteur** : `ParticleSystem` continu (exhaust) pendant le roulement de décollage
+- **Vibration caméra** à la rotation du nez (`DOShakePosition`)
+- **AudioSource** placeholder pour les futurs sons moteurs
+- **Odin Inspector** : `[ShowInInspector]` timer de gate + état, `[Button]` « Force Departure »
+
 ### Étape 2A-bis — Environnement de base prédéfini ✅ `v0.7.3`
 - **AirportEnvironment** : génère automatiquement un layout d'aéroport au démarrage via ZoneSystem
   - Parking (20×16 cellules) en bas, relié au terminal par une route d'accès

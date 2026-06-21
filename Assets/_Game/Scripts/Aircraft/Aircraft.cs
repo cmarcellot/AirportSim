@@ -3,9 +3,14 @@ using System.Collections;
 using System.Collections.Generic;
 using DG.Tweening;
 using Sirenix.OdinInspector;
+using TMPro;
 using UnityEngine;
 
-public enum AircraftState { Approaching, Landing, Idle, Taxiing, AtGate, Boarding }
+public enum AircraftState
+{
+    Approaching, Landing, Idle, Taxiing, AtGate, Boarding,
+    Departing, TaxiingToRunway, TakingOff, Departed
+}
 
 public class Aircraft : MonoBehaviour
 {
@@ -22,6 +27,9 @@ public class Aircraft : MonoBehaviour
     [FoldoutGroup("Aircraft State"), ShowInInspector, ReadOnly]
     public List<Vector3> TaxiPath { get; private set; } = new();
 
+    [FoldoutGroup("Aircraft State"), ShowInInspector, ReadOnly]
+    private float _gateTimer;
+
     // ── Données de vol ─────────────────────────────────────────────────────
     [FoldoutGroup("Flight Data"), ShowInInspector, ReadOnly]
     public AircraftData Data { get; private set; }
@@ -36,7 +44,12 @@ public class Aircraft : MonoBehaviour
     private Sequence       _seq;
     private Coroutine      _taxiCo;
     private ParticleSystem _smoke;
+    private ParticleSystem _exhaustPS;
+    private AudioSource    _audioSource;
     private Vector3        _prevPos;
+    private float          _runwayStartX;
+    private float          _runwayEndX;
+    private bool           _forceDeparture;
 
     // ── Init (appelé par FlightScheduler) ─────────────────────────────────
 
@@ -44,7 +57,13 @@ public class Aircraft : MonoBehaviour
     {
         Data          = data;
         RunwayCenterZ = centerZ;
+        _runwayStartX = runwayStartX;
+        _runwayEndX   = runwayEndX;
         State         = AircraftState.Approaching;
+
+        _audioSource              = gameObject.AddComponent<AudioSource>();
+        _audioSource.playOnAwake  = false;
+        _audioSource.spatialBlend = 1f;
 
         const float altitude  = 80f;
         const float spawnDist = 500f;
@@ -78,10 +97,10 @@ public class Aircraft : MonoBehaviour
         {
             State = AircraftState.Idle;
             Speed = 0f;
-            OnLanded?.Invoke(this); // FlightScheduler assigne le taxi
+            OnLanded?.Invoke(this);
         });
 
-        // Fallback : si aucune gate n'est assignée après 15 s, l'avion disparaît
+        // Fallback si aucune gate assignée après 15 s
         _seq.AppendInterval(15f);
         _seq.AppendCallback(() =>
         {
@@ -100,6 +119,8 @@ public class Aircraft : MonoBehaviour
         _taxiCo      = StartCoroutine(TaxiCoroutine(path));
     }
 
+    // ── Odin buttons ───────────────────────────────────────────────────────
+
     [Button("Test Taxi to Gate"), FoldoutGroup("Aircraft State")]
     private void TestTaxiToGate()
     {
@@ -107,12 +128,20 @@ public class Aircraft : MonoBehaviour
         FindAnyObjectByType<FlightScheduler>()?.AssignGateToAircraft(this);
     }
 
+    [Button("Force Departure"), FoldoutGroup("Aircraft State")]
+    private void ForceDeparture()
+    {
+        if (!Application.isPlaying || State != AircraftState.AtGate) return;
+        _forceDeparture = true;
+    }
+
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
     private void Update()
     {
-        if (State == AircraftState.Idle || State == AircraftState.AtGate ||
-            State == AircraftState.Boarding) return;
+        if (State == AircraftState.Idle      || State == AircraftState.AtGate  ||
+            State == AircraftState.Boarding  || State == AircraftState.TakingOff ||
+            State == AircraftState.Departed) return;
         Speed    = Vector3.Distance(transform.position, _prevPos) / Time.deltaTime;
         _prevPos = transform.position;
     }
@@ -133,11 +162,138 @@ public class Aircraft : MonoBehaviour
         Camera.main?.transform.DOShakePosition(0.6f, 0.3f, 12, 90f, false);
     }
 
-    // ── Coroutine taxi ─────────────────────────────────────────────────────
+    // ── Taxi vers gate ─────────────────────────────────────────────────────
 
     private IEnumerator TaxiCoroutine(List<Vector3> path)
     {
         State = AircraftState.Taxiing;
+        yield return StartCoroutine(FollowWaypointPath(path));
+
+        State = AircraftState.AtGate;
+        Speed = 0f;
+        AssignedGate?.AssignAircraft(this);
+
+        // Attente au gate (3 minutes de jeu)
+        yield return StartCoroutine(WaitAtGate());
+
+        // Cycle de départ
+        yield return StartCoroutine(DepartureCoroutine());
+    }
+
+    // ── Attente à la gate ──────────────────────────────────────────────────
+
+    private IEnumerator WaitAtGate()
+    {
+        _gateTimer = 3f * 60f; // 3 min de jeu → secondes
+
+        while (_gateTimer > 0f && !_forceDeparture)
+        {
+            float spd = TimeManager.Instance != null ? TimeManager.Instance.SpeedMultiplier : 1f;
+            _gateTimer -= Time.deltaTime * spd;
+            yield return null;
+        }
+
+        _gateTimer      = 0f;
+        _forceDeparture = false;
+    }
+
+    // ── Départ ─────────────────────────────────────────────────────────────
+
+    private IEnumerator DepartureCoroutine()
+    {
+        State = AircraftState.Departing;
+        AssignedGate?.ReleaseAircraft();
+        AssignedGate = null;
+
+        // Pushback : reculer de ~20 u depuis la gate
+        var pushbackTarget   = transform.position - transform.forward * 20f;
+        pushbackTarget.y     = 0f;
+        yield return transform.DOMove(pushbackTarget, 4f)
+                              .SetEase(Ease.OutCubic)
+                              .WaitForCompletion();
+
+        // Taxi vers la piste
+        State = AircraftState.TaxiingToRunway;
+
+        var pathfinding = FindAnyObjectByType<PathfindingSystem>();
+        var runwayEntry = new Vector3(_runwayStartX, 0f, RunwayCenterZ);
+
+        if (pathfinding != null)
+        {
+            var taxiPath = pathfinding.FindAirsidePath(transform.position, runwayEntry);
+            if (taxiPath != null && taxiPath.Count > 0)
+                yield return StartCoroutine(FollowWaypointPath(taxiPath));
+        }
+
+        // Alignement cap est (direction de décollage)
+        yield return transform.DORotateQuaternion(Quaternion.LookRotation(Vector3.right), 1f)
+                              .SetEase(Ease.InOutSine)
+                              .WaitForCompletion();
+
+        yield return StartCoroutine(TakeoffSequence());
+    }
+
+    // ── Décollage ──────────────────────────────────────────────────────────
+
+    private IEnumerator TakeoffSequence()
+    {
+        State = AircraftState.TakingOff;
+
+        // Positionnement au seuil de piste
+        transform.position = new Vector3(_runwayStartX, 0f, RunwayCenterZ);
+        transform.rotation = Quaternion.LookRotation(Vector3.right);
+
+        _exhaustPS = BuildExhaustEffect();
+        _exhaustPS?.Play();
+
+        const float vMax      = 130f;
+        const float accel     = 20f;
+        const float v1        = 80f;   // vitesse de rotation (nez)
+        const float climbRate = 28f;   // montée verticale u/s
+        float       speed     = 0f;
+        bool        rotated   = false;
+
+        while (true)
+        {
+            float dt = Time.deltaTime;
+            speed    = Mathf.Min(speed + accel * dt, vMax);
+            Speed    = speed;
+
+            var move = Vector3.right * speed * dt;
+
+            if (speed >= v1)
+                move.y = climbRate * (speed / vMax) * dt;
+
+            transform.position += move;
+
+            if (speed >= v1 && !rotated)
+            {
+                rotated = true;
+                // Rotation nez vers le haut (pitch −15°, cap est Y=90°)
+                transform.DORotateQuaternion(Quaternion.Euler(-15f, 90f, 0f), 2f)
+                         .SetEase(Ease.InOutSine);
+                Camera.main?.transform.DOShakePosition(0.8f, 0.4f, 10, 90f, false);
+            }
+
+            // Hors carte et altitude suffisante → décollage réussi
+            if (transform.position.x > 350f && transform.position.y >= 60f) break;
+            // Sécurité : hors carte très loin
+            if (transform.position.x > 700f) break;
+
+            yield return null;
+        }
+
+        EconomySystem.Instance?.AddRevenue(50_000f);
+        ShowRevenueNotification();
+
+        State = AircraftState.Departed;
+        UnityEngine.Object.Destroy(gameObject);
+    }
+
+    // ── Suivi de waypoints (réutilisé taxi→gate et taxi→piste) ────────────
+
+    private IEnumerator FollowWaypointPath(List<Vector3> path)
+    {
         float taxiSpeed = Data?.taxiSpeed ?? 10f;
 
         for (int i = 0; i < path.Count; i++)
@@ -147,7 +303,6 @@ public class Aircraft : MonoBehaviour
 
             if (delta.sqrMagnitude < 0.04f) continue;
 
-            // Rotation fluide vers le prochain waypoint
             var targetRot = Quaternion.LookRotation(delta.normalized);
             float angle   = Quaternion.Angle(transform.rotation, targetRot);
             if (angle > 2f)
@@ -158,7 +313,6 @@ public class Aircraft : MonoBehaviour
                                       .WaitForCompletion();
             }
 
-            // Déplacement vers le waypoint
             float dist = Vector3.Distance(
                 new Vector3(transform.position.x, 0f, transform.position.z), target);
             if (dist > 0.1f)
@@ -166,16 +320,6 @@ public class Aircraft : MonoBehaviour
                                       .SetEase(Ease.Linear)
                                       .WaitForCompletion();
         }
-
-        // Arrivée à la gate
-        State = AircraftState.AtGate;
-        Speed = 0f;
-        AssignedGate?.AssignAircraft(this);
-
-        // Départ après 120 s
-        yield return new WaitForSeconds(120f);
-        AssignedGate?.ReleaseAircraft();
-        StartDespawn();
     }
 
     // ── Disparition ────────────────────────────────────────────────────────
@@ -184,7 +328,40 @@ public class Aircraft : MonoBehaviour
     {
         transform.DOScale(Vector3.zero, 1.5f)
                  .SetEase(Ease.InBack)
-                 .OnComplete(() => Destroy(gameObject));
+                 .OnComplete(() => UnityEngine.Object.Destroy(gameObject));
+    }
+
+    // ── Notification revenue ───────────────────────────────────────────────
+
+    private void ShowRevenueNotification()
+    {
+        // Cherche le canvas Screen Space Overlay du HUD
+        Canvas hud = null;
+        foreach (var c in FindObjectsByType<Canvas>(FindObjectsSortMode.None))
+            if (c.renderMode == RenderMode.ScreenSpaceOverlay) { hud = c; break; }
+        if (hud == null) return;
+
+        var go   = new GameObject("RevenueNotif");
+        go.transform.SetParent(hud.transform, false);
+
+        var rect = go.AddComponent<RectTransform>();
+        rect.anchorMin        = rect.anchorMax = new Vector2(0.5f, 0.6f);
+        rect.pivot            = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta        = new Vector2(300f, 80f);
+
+        var tmp       = go.AddComponent<TextMeshProUGUI>();
+        tmp.text      = "+50 000 $";
+        tmp.fontSize  = 42f;
+        tmp.color     = new Color(0.15f, 0.95f, 0.15f, 1f);
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.fontStyle = FontStyles.Bold;
+
+        rect.DOAnchorPos(new Vector2(0f, 120f), 2f).SetEase(Ease.OutCubic);
+        DOTween.To(() => tmp.color, c => tmp.color = c,
+                   new Color(0.15f, 0.95f, 0.15f, 0f), 1.5f)
+               .SetDelay(0.5f)
+               .OnComplete(() => UnityEngine.Object.Destroy(go));
     }
 
     // ── Effets visuels ─────────────────────────────────────────────────────
@@ -194,11 +371,9 @@ public class Aircraft : MonoBehaviour
         var discMat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
         discMat.SetColor("_BaseColor", new Color(0.25f, 0.25f, 0.25f));
 
-        // Disques moteurs (sur les ailes)
         CreateEngineDisc(new Vector3(3f, -1.2f, -7f), discMat);
         CreateEngineDisc(new Vector3(3f, -1.2f,  7f), discMat);
 
-        // Feux de navigation (rouge gauche / vert droit)
         CreateNavLight(new Vector3(2f, 0f, -9.5f), Color.red,   0f);
         CreateNavLight(new Vector3(2f, 0f,  9.5f), Color.green, 0.35f);
     }
@@ -211,9 +386,8 @@ public class Aircraft : MonoBehaviour
         go.transform.localPosition = localPos;
         go.transform.localScale    = new Vector3(1.8f, 0.05f, 1.8f);
         go.GetComponent<MeshRenderer>().sharedMaterial = mat;
-        Object.Destroy(go.GetComponent<CapsuleCollider>());
+        UnityEngine.Object.Destroy(go.GetComponent<CapsuleCollider>());
 
-        // Rotation continue autour de l'axe avant (local X)
         go.transform.DOLocalRotate(
             new Vector3(360f, 0f, 0f), 0.18f, RotateMode.FastBeyond360)
            .SetLoops(-1, LoopType.Restart)
@@ -227,7 +401,7 @@ public class Aircraft : MonoBehaviour
         go.transform.SetParent(transform);
         go.transform.localPosition = localPos;
         go.transform.localScale    = Vector3.one * 0.55f;
-        Object.Destroy(go.GetComponent<SphereCollider>());
+        UnityEngine.Object.Destroy(go.GetComponent<SphereCollider>());
 
         var mat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
         mat.SetColor("_BaseColor", color);
@@ -279,6 +453,45 @@ public class Aircraft : MonoBehaviour
         grad.SetKeys(
             new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
             new[] { new GradientAlphaKey(0.7f, 0f),        new GradientAlphaKey(0f, 1f) });
+        col.color = grad;
+
+        return ps;
+    }
+
+    // ── Traînée de décollage ───────────────────────────────────────────────
+
+    private ParticleSystem BuildExhaustEffect()
+    {
+        var go = new GameObject("EngineExhaust");
+        go.transform.SetParent(transform);
+        go.transform.localPosition = new Vector3(-6f, -1f, 0f);
+
+        var ps   = go.AddComponent<ParticleSystem>();
+        var main = ps.main;
+        main.startLifetime   = new ParticleSystem.MinMaxCurve(0.4f, 0.9f);
+        main.startSpeed      = new ParticleSystem.MinMaxCurve(4f, 10f);
+        main.startSize       = new ParticleSystem.MinMaxCurve(0.3f, 0.8f);
+        main.startColor      = new ParticleSystem.MinMaxGradient(
+                                   new Color(1f, 1f, 1f, 0.5f),
+                                   new Color(0.7f, 0.7f, 0.7f, 0.25f));
+        main.maxParticles    = 200;
+        main.loop            = true;
+        main.playOnAwake     = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+
+        var emission = ps.emission;
+        emission.rateOverTime = 30f;
+
+        var shape       = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius    = 0.5f;
+
+        var col     = ps.colorOverLifetime;
+        col.enabled = true;
+        var grad    = new Gradient();
+        grad.SetKeys(
+            new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+            new[] { new GradientAlphaKey(0.45f, 0f), new GradientAlphaKey(0f, 1f) });
         col.color = grad;
 
         return ps;
