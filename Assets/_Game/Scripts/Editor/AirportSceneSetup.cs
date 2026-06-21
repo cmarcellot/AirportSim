@@ -739,6 +739,43 @@ public static class AirportSceneSetup
         Debug.Log("[AirportSim] EventSystem ajouté (InputSystemUIInputModule).");
     }
 
+    // ── Setup 2A-bis — Environnement prédéfini ─────────────────────────────
+
+    [MenuItem("AirportSim/Setup 2A-bis - Airport Environment", true)]
+    public static bool Setup2AbisValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 2A-bis - Airport Environment")]
+    public static void Setup2Abis()
+    {
+        if (Object.FindAnyObjectByType<AirportEnvironment>() != null)
+        {
+            EditorUtility.DisplayDialog("AirportSim",
+                "Un AirportEnvironment existe déjà dans la scène.", "OK");
+            return;
+        }
+
+        // Configurer la lumière directionnelle si elle existe
+        var light = Object.FindAnyObjectByType<Light>();
+        if (light != null && light.type == LightType.Directional)
+        {
+            light.transform.eulerAngles = new Vector3(45f, -30f, 0f);
+            light.intensity             = 1.2f;
+            light.shadows               = LightShadows.Soft;
+            light.shadowStrength        = 0.55f;
+        }
+
+        // Ajouter AirportEnvironment à la scène
+        var go = new GameObject("Airport Environment");
+        go.AddComponent<AirportEnvironment>();
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        EditorUtility.DisplayDialog("AirportSim",
+            "Airport Environment ajouté !\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.\n" +
+            "L'environnement se génère automatiquement au démarrage.\n\n" +
+            "Bouton « Regenerate Environment » dans l'Inspector pour regénérer sans relancer.", "OK");
+    }
+
     private static void EnsureFolder(string parent, string name)
     {
         string path = parent + "/" + name;

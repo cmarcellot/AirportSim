@@ -95,6 +95,17 @@ Assets/
   - API : `FindAirsidePath` / `FindLandsidePath`
 - **Menu de construction** : onglets **Zones** (peinture) | **Bâtiments** (pose) — 5 bâtiments : ControlTower · Gate · FuelStation · Shop · Restaurant
 
+### Étape 2A-bis — Environnement de base prédéfini ✅ `v0.7.3`
+- **AirportEnvironment** : génère automatiquement un layout d'aéroport au démarrage via ZoneSystem
+  - Parking (20×16 cellules) en bas, relié au terminal par une route d'accès
+  - TerminalHall central (40×30 cellules) avec murs blancs semi-transparents (hauteur 8 u)
+  - Apron béton (30×20 cellules) derrière le terminal
+  - Taxiways reliant l'apron aux pistes (L + R verticaux, horizontal de jonction)
+  - Deux pistes parallèles en haut (60×8 cellules chacune)
+- **Marquages au sol** : tirets blancs centraux + bandes de seuil sur les runways, ligne jaune continue sur les taxiways, grille blanche dans le parking
+- **Éclairage URP** : lumière directionnelle 45°, ombres douces, ambiance bleu ciel
+- **Odin Inspector** : [Button] « Regenerate Environment » / « Clear Environment », paramètres exposés (taille terminal, parking, nombre de pistes, largeur taxiway)
+
 ## Lancer le projet
 
 1. Ouvrir le projet dans Unity 6
@@ -104,8 +115,9 @@ Assets/
 5. Menu **AirportSim → Setup 1D - Build System**
 6. Menu **AirportSim → Setup 1E - Build Menu**
 7. Menu **AirportSim → Setup 2A - Pathfinding**
-8. Sauvegarder (`Ctrl+S`)
-9. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
+8. Menu **AirportSim → Setup 2A-bis - Airport Environment**
+9. Sauvegarder (`Ctrl+S`)
+10. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
 ## Contrôles
 
