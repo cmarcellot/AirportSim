@@ -7,19 +7,19 @@ using Sirenix.OdinInspector;
 public class RTSCamera : MonoBehaviour
 {
     [FoldoutGroup("Movement")]
-    [SerializeField] private float moveSpeed = 100f;
+    [SerializeField] private float moveSpeed = 500f;
 
     [FoldoutGroup("Movement")]
     [SerializeField] private Vector2 mapBounds = new Vector2(512f, 512f);
 
     [FoldoutGroup("Zoom")]
-    [SerializeField] private float zoomSpeed = 25f;
+    [SerializeField] private float zoomSpeed = 60f;
 
     [FoldoutGroup("Zoom")]
     [SerializeField] private float minOrthoSize = 5f;
 
     [FoldoutGroup("Zoom")]
-    [SerializeField] private float maxOrthoSize = 250f;
+    [SerializeField] private float maxOrthoSize = 500f;
 
     [FoldoutGroup("Zoom")]
     [SerializeField] private float zoomDuration = 2.5f;
