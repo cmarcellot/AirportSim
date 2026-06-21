@@ -88,7 +88,7 @@ public class FlightScheduler : MonoBehaviour
     {
         if (aircraft == null) return;
 
-        var gates = FindObjectsByType<Gate>(FindObjectsSortMode.None);
+        var gates = FindObjectsByType<Gate>();
         Gate chosen = null;
         foreach (var g in gates)
             if (g.IsAvailable()) { chosen = g; break; }
@@ -129,7 +129,7 @@ public class FlightScheduler : MonoBehaviour
         if (_zones == null) _zones = FindAnyObjectByType<ZoneSystem>();
 
         // Ne pas faire atterrir si aucune gate n'est disponible
-        var gates = FindObjectsByType<Gate>(FindObjectsSortMode.None);
+        var gates = FindObjectsByType<Gate>();
         if (gates.Length > 0 && System.Array.TrueForAll(gates, g => !g.IsAvailable()))
         {
             Debug.Log("[FlightScheduler] Toutes les gates occupées — atterrissage suspendu.");

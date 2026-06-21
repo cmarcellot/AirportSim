@@ -748,7 +748,7 @@ public static class AirportSceneSetup
     public static void Setup2C()
     {
         // Supprimer les gates existantes
-        foreach (var g in Object.FindObjectsByType<Gate>(FindObjectsSortMode.None))
+        foreach (var g in Object.FindObjectsByType<Gate>())
             Object.DestroyImmediate(g.gameObject);
 
         // 5 gates au bord sud de l'Apron (Z≈14, X espacés de 20 u)

@@ -150,6 +150,9 @@ public class Aircraft : MonoBehaviour
     {
         _seq?.Kill();
         if (_taxiCo != null) StopCoroutine(_taxiCo);
+        // Tuer tous les tweens DOTween sur chaque transform enfant (disques moteurs, feux nav)
+        foreach (var t in GetComponentsInChildren<Transform>(true))
+            DOTween.Kill(t);
     }
 
     // ── Atterrissage ───────────────────────────────────────────────────────
@@ -338,7 +341,7 @@ public class Aircraft : MonoBehaviour
     {
         // Cherche le canvas Screen Space Overlay du HUD
         Canvas hud = null;
-        foreach (var c in FindObjectsByType<Canvas>(FindObjectsSortMode.None))
+        foreach (var c in FindObjectsByType<Canvas>())
             if (c.renderMode == RenderMode.ScreenSpaceOverlay) { hud = c; break; }
         if (hud == null) return;
 
