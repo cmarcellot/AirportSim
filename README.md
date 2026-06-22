@@ -113,6 +113,15 @@ Assets/
 - **FlightScheduler** : détecte les pistes via ZoneSystem, fait apparaître un avion toutes les 2 min de jeu (respecte `SpeedMultiplier`), `[Button] Spawn Test Aircraft`
 - **Prefab Boeing 737** : corps + ailes + dérive (cubes blancs)
 
+### Étape 3B — Véhicule au sol : Catering Truck ✅ `v0.13.0`
+- **CateringTruck** (hérite de GroundVehicle) : durée de service 3 min (temps de jeu), se gare côté opposé au FuelTruck (+X de la gate)
+- **Animation plateforme** : cube bleu élévatrice monte de 3 unités via DOTween au début du service, redescend avant retour au dépôt
+- **Coordination FuelTruck + CateringTruck** : les deux servent l'avion en parallèle — départ bloqué tant que `fuelReady && cateringReady` ne sont pas tous les deux vrais
+- **Aircraft.cs** étendu : `SetFuelReady(bool)` / `SetCateringReady(bool)`, visibles dans l'Inspector Odin en mode lecture seule
+- **Depot.cs** étendu : gère deux pools séparés (FuelTrucks côté -X, CateringTrucks côté +X), deux files d'attente indépendantes, indicateur mis à jour
+- **Rétrocompatible** : sans Depot, `FuelReady` et `CateringReady` valent `true` par défaut → pas de blocage
+- **Setup 3B** : menu `AirportSim → Setup 3B - Catering Truck` — crée le prefab CateringTruck et injecte dans le Depot existant
+
 ### Étape 3A — Véhicule au sol : Fuel Truck ✅ `v0.12.0`
 - **GroundVehicle** : classe de base — vitesse configurable, suivi de chemin `List<Vector3>` via `PathfindingSystem.FindAirsidePath`, rotation fluide DOTween dans les virages, états `Idle / MovingToAircraft / Servicing / Returning`
 - **FuelTruck** (hérite de GroundVehicle) : durée de service 2 min (temps de jeu), déclenché automatiquement quand `FlightStatus.AtGate`, barre de progression WorldSpace Canvas en face de la caméra, retour au dépôt après service
@@ -165,8 +174,9 @@ Assets/
 9. Menu **AirportSim → Setup 2A-bis - Airport Environment**
 10. Menu **AirportSim → Setup 2E - Flight Planning**
 11. Menu **AirportSim → Setup 3A - Fuel Truck**
-12. Sauvegarder (`Ctrl+S`)
-13. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
+12. Menu **AirportSim → Setup 3B - Catering Truck**
+13. Sauvegarder (`Ctrl+S`)
+14. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
 ## Contrôles
 

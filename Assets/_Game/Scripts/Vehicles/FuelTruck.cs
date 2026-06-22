@@ -72,6 +72,10 @@ public class FuelTruck : GroundVehicle
 
         SetBarProgress(1f);
         SetBarVisible(false);
+
+        if (AssignedAircraft != null)
+            AssignedAircraft.SetFuelReady(true);
+
         ReturnToDepot();
     }
 
@@ -142,7 +146,7 @@ public class FuelTruck : GroundVehicle
         if (!Application.isPlaying) return;
         var aircraft = FindAnyObjectByType<Aircraft>();
         if (aircraft == null) { Debug.LogWarning("[FuelTruck] Aucun avion dans la scène."); return; }
-        if (_depot != null)   _depot.RequestService(aircraft);
+        if (_depot != null)   _depot.RequestFuelService(aircraft);
         else                  DispatchToAircraft(aircraft);
     }
 }

@@ -760,7 +760,7 @@ public static class AirportSceneSetup
         var truckPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(truckPath);
         if (truckPrefab == null)
         {
-            var truckGo = Depot.BuildDefaultTruck();
+            var truckGo = Depot.BuildDefaultFuelTruck();
             truckGo.AddComponent<FuelTruck>();
             truckPrefab = PrefabUtility.SaveAsPrefabAsset(truckGo, truckPath);
             GameObject.DestroyImmediate(truckGo);
@@ -785,7 +785,7 @@ public static class AirportSceneSetup
             var depotComp = depotGo.AddComponent<Depot>();
             // Injecter le préfab camion via SerializedObject
             var depotCompSO = new SerializedObject(depotComp);
-            depotCompSO.FindProperty("truckPrefab").objectReferenceValue = truckPrefab;
+            depotCompSO.FindProperty("fuelTruckPrefab").objectReferenceValue = truckPrefab;
             depotCompSO.ApplyModifiedProperties();
 
             depotPrefab = PrefabUtility.SaveAsPrefabAsset(depotGo, depotPrefabPath);
@@ -1040,6 +1040,77 @@ public static class AirportSceneSetup
             "Sauvegarde (Ctrl+S) puis Play.\n" +
             "L'environnement se génère automatiquement au démarrage.\n\n" +
             "Bouton « Regenerate Environment » dans l'Inspector pour regénérer sans relancer.", "OK");
+    }
+
+    // ── Setup 3B — Catering Truck ─────────────────────────────────────────
+
+    [MenuItem("AirportSim/Setup 3B - Catering Truck", true)]
+    public static bool Setup3BValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 3B - Catering Truck")]
+    public static void Setup3B()
+    {
+        EnsureFolder("Assets/_Game/Prefabs", "Vehicles");
+
+        // ── Prefab CateringTruck ──────────────────────────────────────────
+        const string cateringPath = "Assets/_Game/Prefabs/Vehicles/CateringTruck.prefab";
+        var cateringPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(cateringPath);
+        if (cateringPrefab == null)
+        {
+            var cateringGo = Depot.BuildDefaultCateringTruck();
+            cateringGo.AddComponent<CateringTruck>();
+            cateringPrefab = PrefabUtility.SaveAsPrefabAsset(cateringGo, cateringPath);
+            GameObject.DestroyImmediate(cateringGo);
+        }
+
+        // ── Injecter dans le Depot existant de la scène ───────────────────
+        var depot = Object.FindAnyObjectByType<Depot>();
+        if (depot != null)
+        {
+            var depotSO = new SerializedObject(depot);
+            depotSO.FindProperty("cateringTruckPrefab").objectReferenceValue = cateringPrefab;
+            // S'assurer qu'on a au moins 2 camions catering
+            var maxCateringProp = depotSO.FindProperty("maxCateringTrucks");
+            if (maxCateringProp != null && maxCateringProp.intValue == 0)
+                maxCateringProp.intValue = 2;
+            depotSO.ApplyModifiedProperties();
+            EditorUtility.SetDirty(depot);
+        }
+        else
+        {
+            Debug.LogWarning("[AirportSim] Aucun Depot dans la scène. Exécute d'abord Setup 3A.");
+        }
+
+        // ── Mettre à jour le prefab Depot pour inclure cateringTruckPrefab ─
+        const string depotPrefabPath = "Assets/_Game/Prefabs/Vehicles/Depot.prefab";
+        var depotPrefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(depotPrefabPath);
+        if (depotPrefabAsset != null)
+        {
+            var depotComp = depotPrefabAsset.GetComponent<Depot>();
+            if (depotComp != null)
+            {
+                var pso = new SerializedObject(depotComp);
+                pso.FindProperty("cateringTruckPrefab").objectReferenceValue = cateringPrefab;
+                var maxCat = pso.FindProperty("maxCateringTrucks");
+                if (maxCat != null && maxCat.intValue == 0) maxCat.intValue = 2;
+                pso.ApplyModifiedProperties();
+                EditorUtility.SetDirty(depotPrefabAsset);
+            }
+        }
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+
+        Debug.Log("[AirportSim] Setup 3B terminé — CateringTruck.");
+        EditorUtility.DisplayDialog("AirportSim",
+            "Setup 3B terminé !\n\n" +
+            "• CateringTruck prefab créé (chassis blanc + plateforme bleue)\n" +
+            "• Injecté dans le Depot existant (2 camions catering)\n\n" +
+            "Le catering truck et le fuel truck partent en parallèle\n" +
+            "dès qu'un avion arrive à la gate.\n" +
+            "L'avion attend que les DEUX soient terminés pour repartir.\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.", "OK");
     }
 
     private static void EnsureFolder(string parent, string name)

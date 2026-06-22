@@ -4,30 +4,55 @@ using DG.Tweening;
 using Sirenix.OdinInspector;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
-/// Bâtiment dépôt : gère le pool de FuelTrucks et les dispatche
-/// automatiquement quand un avion arrive à la gate.
+/// Bâtiment dépôt : gère un pool de FuelTrucks et un pool de CateringTrucks.
+/// Les deux types sont dépêchés en parallèle dès qu'un avion arrive à la gate.
 /// </summary>
 public class Depot : MonoBehaviour
 {
+    // ── Config ─────────────────────────────────────────────────────────────
+
     [FoldoutGroup("Depot Config")]
-    [SerializeField] private int maxTrucks = 3;
+    [FormerlySerializedAs("maxTrucks")]
+    [SerializeField] private int maxFuelTrucks = 3;
+
+    [FoldoutGroup("Depot Config")]
+    [SerializeField] private int maxCateringTrucks = 2;
 
     [FoldoutGroup("Depot Config")]
     [Tooltip("Prefab FuelTruck. Si vide, modèle généré par code.")]
-    [SerializeField] private GameObject truckPrefab;
+    [FormerlySerializedAs("truckPrefab")]
+    [SerializeField] private GameObject fuelTruckPrefab;
+
+    [FoldoutGroup("Depot Config")]
+    [Tooltip("Prefab CateringTruck. Si vide, modèle généré par code.")]
+    [SerializeField] private GameObject cateringTruckPrefab;
+
+    // ── État ───────────────────────────────────────────────────────────────
 
     [FoldoutGroup("Depot State"), ShowInInspector, ReadOnly]
-    private int _availableCount;
+    private int _fuelAvailable;
 
     [FoldoutGroup("Depot State"), ShowInInspector, ReadOnly]
-    private int _queueCount;
+    private int _cateringAvailable;
 
-    private readonly List<GroundVehicle> _idle  = new();
-    private readonly Queue<Aircraft>     _queue = new();
-    private FlightScheduler              _scheduler;
-    private TextMeshPro                  _countLabel;
+    [FoldoutGroup("Depot State"), ShowInInspector, ReadOnly]
+    private int _fuelQueueCount;
+
+    [FoldoutGroup("Depot State"), ShowInInspector, ReadOnly]
+    private int _cateringQueueCount;
+
+    // ── Pools ──────────────────────────────────────────────────────────────
+
+    private readonly List<FuelTruck>    _idleFuel     = new();
+    private readonly List<CateringTruck>_idleCatering = new();
+    private readonly Queue<Aircraft>    _fuelQueue    = new();
+    private readonly Queue<Aircraft>    _cateringQueue= new();
+
+    private FlightScheduler _scheduler;
+    private TextMeshPro     _countLabel;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -35,8 +60,8 @@ public class Depot : MonoBehaviour
     {
         yield return null;
 
-        for (int i = 0; i < maxTrucks; i++)
-            SpawnTruck(i);
+        for (int i = 0; i < maxFuelTrucks;    i++) SpawnFuelTruck(i);
+        for (int i = 0; i < maxCateringTrucks; i++) SpawnCateringTruck(i);
 
         _scheduler = FindAnyObjectByType<FlightScheduler>();
         if (_scheduler != null)
@@ -57,72 +82,153 @@ public class Depot : MonoBehaviour
     private void OnFlightStatus(ActiveFlight flight)
     {
         if (flight.Status == FlightStatus.AtGate && flight.Aircraft != null)
-            RequestService(flight.Aircraft);
+        {
+            RequestFuelService(flight.Aircraft);
+            RequestCateringService(flight.Aircraft);
+        }
     }
 
     // ── API publique ───────────────────────────────────────────────────────
 
-    public void RequestService(Aircraft aircraft)
+    public void RequestFuelService(Aircraft aircraft)
     {
-        if (aircraft == null) return;
+        if (aircraft == null || maxFuelTrucks == 0) return;
 
-        if (_idle.Count > 0)
+        aircraft.SetFuelReady(false);
+
+        if (_idleFuel.Count > 0)
         {
-            var truck = _idle[0];
-            _idle.RemoveAt(0);
+            var truck = _idleFuel[0];
+            _idleFuel.RemoveAt(0);
             truck.DispatchToAircraft(aircraft);
         }
         else
         {
-            _queue.Enqueue(aircraft);
+            _fuelQueue.Enqueue(aircraft);
         }
         UpdateIndicator();
     }
 
-    /// <summary>Position de parking pour un véhicule au retour (décalage par index).</summary>
+    public void RequestCateringService(Aircraft aircraft)
+    {
+        if (aircraft == null || maxCateringTrucks == 0) return;
+
+        aircraft.SetCateringReady(false);
+
+        if (_idleCatering.Count > 0)
+        {
+            var truck = _idleCatering[0];
+            _idleCatering.RemoveAt(0);
+            truck.DispatchToAircraft(aircraft);
+        }
+        else
+        {
+            _cateringQueue.Enqueue(aircraft);
+        }
+        UpdateIndicator();
+    }
+
+    /// <summary>Position de parking selon le type et l'index dans le pool idle.</summary>
     public Vector3 ParkingSpot(GroundVehicle vehicle)
     {
-        int idx = _idle.Count; // camions déjà rentrés → décalage
-        return transform.position + new Vector3((idx % 3) * 5f, 0f, (idx / 3) * 5f);
+        if (vehicle is FuelTruck)
+        {
+            // Côté gauche du dépôt (-X)
+            int idx = _idleFuel.Count;
+            return transform.position + new Vector3(-(idx + 1) * 5f, 0f, 0f);
+        }
+        else
+        {
+            // Côté droit du dépôt (+X)
+            int idx = _idleCatering.Count;
+            return transform.position + new Vector3((idx + 1) * 5f, 0f, 0f);
+        }
     }
 
     public void OnVehicleReturned(GroundVehicle vehicle)
     {
-        // Purger avions déjà partis de la file
-        while (_queue.Count > 0 &&
-               (_queue.Peek() == null || _queue.Peek().State == AircraftState.Departed))
-            _queue.Dequeue();
+        if (vehicle is FuelTruck fuelTruck)
+            HandleFuelReturn(fuelTruck);
+        else if (vehicle is CateringTruck cateringTruck)
+            HandleCateringReturn(cateringTruck);
 
-        if (_queue.Count > 0)
-        {
-            vehicle.DispatchToAircraft(_queue.Dequeue());
-        }
-        else
-        {
-            _idle.Add(vehicle);
-            vehicle.transform.position = ParkingSpot(vehicle);
-        }
         UpdateIndicator();
     }
 
-    // ── Spawn camions ──────────────────────────────────────────────────────
+    // ── Retour au dépôt par type ───────────────────────────────────────────
 
-    private void SpawnTruck(int index)
+    private void HandleFuelReturn(FuelTruck truck)
     {
-        GameObject go = truckPrefab != null
-            ? Instantiate(truckPrefab)
-            : BuildDefaultTruck();
+        PurgeDeparted(_fuelQueue);
 
-        go.name             = $"FuelTruck_{index + 1}";
-        go.transform.position = transform.position + new Vector3(index * 5f, 0f, 0f);
+        if (_fuelQueue.Count > 0)
+        {
+            truck.DispatchToAircraft(_fuelQueue.Dequeue());
+        }
+        else
+        {
+            int parkIdx = _idleFuel.Count;
+            _idleFuel.Add(truck);
+            truck.transform.position = transform.position + new Vector3(-(parkIdx + 1) * 5f, 0f, 0f);
+        }
+    }
+
+    private void HandleCateringReturn(CateringTruck truck)
+    {
+        PurgeDeparted(_cateringQueue);
+
+        if (_cateringQueue.Count > 0)
+        {
+            truck.DispatchToAircraft(_cateringQueue.Dequeue());
+        }
+        else
+        {
+            int parkIdx = _idleCatering.Count;
+            _idleCatering.Add(truck);
+            truck.transform.position = transform.position + new Vector3((parkIdx + 1) * 5f, 0f, 0f);
+        }
+    }
+
+    private static void PurgeDeparted(Queue<Aircraft> queue)
+    {
+        while (queue.Count > 0 &&
+               (queue.Peek() == null || queue.Peek().State == AircraftState.Departed))
+            queue.Dequeue();
+    }
+
+    // ── Spawn ──────────────────────────────────────────────────────────────
+
+    private void SpawnFuelTruck(int index)
+    {
+        GameObject go = fuelTruckPrefab != null
+            ? Instantiate(fuelTruckPrefab)
+            : BuildDefaultFuelTruck();
+
+        go.name               = $"FuelTruck_{index + 1}";
+        go.transform.position = transform.position + new Vector3(-(index + 1) * 5f, 0f, 0f);
 
         var truck = go.GetComponent<FuelTruck>() ?? go.AddComponent<FuelTruck>();
         truck.Initialize(this);
-        _idle.Add(truck);
+        _idleFuel.Add(truck);
     }
 
-    /// <summary>Construit un modèle FuelTruck procédural (placeholder).</summary>
-    public static GameObject BuildDefaultTruck()
+    private void SpawnCateringTruck(int index)
+    {
+        GameObject go = cateringTruckPrefab != null
+            ? Instantiate(cateringTruckPrefab)
+            : BuildDefaultCateringTruck();
+
+        go.name               = $"CateringTruck_{index + 1}";
+        go.transform.position = transform.position + new Vector3((index + 1) * 5f, 0f, 0f);
+
+        var truck = go.GetComponent<CateringTruck>() ?? go.AddComponent<CateringTruck>();
+        truck.Initialize(this);
+        _idleCatering.Add(truck);
+    }
+
+    // ── Modèles procéduraux ────────────────────────────────────────────────
+
+    public static GameObject BuildDefaultFuelTruck()
     {
         var yellowMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
         yellowMat.color = new Color(1f, 0.85f, 0.05f);
@@ -132,7 +238,6 @@ public class Depot : MonoBehaviour
 
         var root = new GameObject("FuelTruckModel");
 
-        // Corps
         var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
         body.name = "Body";
         body.transform.SetParent(root.transform);
@@ -141,7 +246,6 @@ public class Depot : MonoBehaviour
         body.GetComponent<MeshRenderer>().sharedMaterial = yellowMat;
         UnityEngine.Object.DestroyImmediate(body.GetComponent<BoxCollider>());
 
-        // Citerne rouge sur le dessus
         var tank = GameObject.CreatePrimitive(PrimitiveType.Cube);
         tank.name = "Tank";
         tank.transform.SetParent(root.transform);
@@ -153,14 +257,44 @@ public class Depot : MonoBehaviour
         return root;
     }
 
-    // ── Visuels dépôt ─────────────────────────────────────────────────────
+    public static GameObject BuildDefaultCateringTruck()
+    {
+        var whiteMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        whiteMat.color = new Color(0.95f, 0.95f, 0.95f);
+
+        var blueMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        blueMat.color = new Color(0.15f, 0.35f, 0.90f);
+
+        var root = new GameObject("CateringTruckModel");
+
+        // Châssis blanc allongé
+        var chassis = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        chassis.name = "Chassis";
+        chassis.transform.SetParent(root.transform);
+        chassis.transform.localPosition = Vector3.zero;
+        chassis.transform.localScale    = new Vector3(4f, 1f, 2f);
+        chassis.GetComponent<MeshRenderer>().sharedMaterial = whiteMat;
+        UnityEngine.Object.DestroyImmediate(chassis.GetComponent<BoxCollider>());
+
+        // Plateforme bleue élévatrice (DOTween sur Y dans CateringTruck)
+        var platform = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        platform.name = "Platform";
+        platform.transform.SetParent(root.transform);
+        platform.transform.localPosition = new Vector3(0f, 1f, 0f);
+        platform.transform.localScale    = new Vector3(3f, 0.4f, 1.8f);
+        platform.GetComponent<MeshRenderer>().sharedMaterial = blueMat;
+        UnityEngine.Object.DestroyImmediate(platform.GetComponent<BoxCollider>());
+
+        return root;
+    }
+
+    // ── Indicateur visuel ─────────────────────────────────────────────────
 
     private void BuildIndicator()
     {
-        // Indicateur flottant : nombre de camions disponibles
         if (transform.Find("DepotLabel") != null) return;
 
-        var go      = new GameObject("DepotLabel");
+        var go = new GameObject("DepotLabel");
         go.transform.SetParent(transform);
         go.transform.localPosition = new Vector3(0f, 5f, 0f);
 
@@ -177,11 +311,21 @@ public class Depot : MonoBehaviour
 
     private void UpdateIndicator()
     {
-        _availableCount = _idle.Count;
-        _queueCount     = _queue.Count;
+        _fuelAvailable     = _idleFuel.Count;
+        _cateringAvailable = _idleCatering.Count;
+        _fuelQueueCount    = _fuelQueue.Count;
+        _cateringQueueCount= _cateringQueue.Count;
+
         if (_countLabel == null) return;
-        _countLabel.text = _availableCount > 0
-            ? $"DEPOT\n{_availableCount} dispo"
-            : $"DEPOT\nfile: {_queueCount}";
+
+        string fuelLine    = _fuelAvailable > 0
+            ? $"Fuel: {_fuelAvailable} dispo"
+            : $"Fuel: file {_fuelQueueCount}";
+
+        string cateringLine = _cateringAvailable > 0
+            ? $"Cat.: {_cateringAvailable} dispo"
+            : $"Cat.: file {_cateringQueueCount}";
+
+        _countLabel.text = $"DEPOT\n{fuelLine}\n{cateringLine}";
     }
 }

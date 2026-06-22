@@ -40,6 +40,16 @@ public class Aircraft : MonoBehaviour
     // ── Événements ─────────────────────────────────────────────────────────
     public event Action<Aircraft> OnLanded;
 
+    // ── Services au sol (coordination FuelTruck + CateringTruck) ──────────
+    [FoldoutGroup("Aircraft State"), ShowInInspector, ReadOnly]
+    public bool FuelReady { get; private set; } = true;
+
+    [FoldoutGroup("Aircraft State"), ShowInInspector, ReadOnly]
+    public bool CateringReady { get; private set; } = true;
+
+    public void SetFuelReady(bool ready)     { FuelReady = ready; }
+    public void SetCateringReady(bool ready) { CateringReady = ready; }
+
     // ── Interne ────────────────────────────────────────────────────────────
     private Sequence       _seq;
     private Coroutine      _taxiCo;
@@ -187,11 +197,11 @@ public class Aircraft : MonoBehaviour
 
     private IEnumerator WaitAtGate()
     {
-        _gateTimer = 3f * 60f; // 3 min de jeu → secondes
+        _gateTimer = 3f * 60f; // 3 min minimum
 
-        // Time.timeScale == SpeedMultiplier (géré par TimeManager) :
-        // Time.deltaTime est déjà mis à l'échelle, pas besoin de multiplier.
-        while (_gateTimer > 0f && !_forceDeparture)
+        // Attend : timer de base ET les deux services si des camions ont été dépêchés.
+        // FuelReady / CateringReady valent true par défaut (sans dépôt, pas de blocage).
+        while ((_gateTimer > 0f || !FuelReady || !CateringReady) && !_forceDeparture)
         {
             _gateTimer -= Time.deltaTime;
             yield return null;
