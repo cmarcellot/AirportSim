@@ -183,10 +183,10 @@ public class FlightBoard : MonoBehaviour
         contentRect.sizeDelta = new Vector2(0f, 0f);
 
         var vlg = contentGo.AddComponent<VerticalLayoutGroup>();
-        vlg.spacing               = 1f;
-        vlg.childControlHeight    = true;
-        vlg.childControlWidth     = true;
-        vlg.childForceExpandWidth = true;
+        vlg.spacing                = 1f;
+        vlg.childControlHeight     = false; // laisser les enfants garder leur sizeDelta.y (36px)
+        vlg.childControlWidth      = true;
+        vlg.childForceExpandWidth  = true;
         vlg.childForceExpandHeight = false;
 
         var fitter = contentGo.AddComponent<ContentSizeFitter>();
@@ -324,6 +324,8 @@ public class FlightBoard : MonoBehaviour
     private void Toggle()
     {
         _animating = true;
+        if (!_open && _rowContainer != null)
+            RefreshAllRows(); // sync à l'ouverture
         float target = _open ? PanelWidth : 0f;
         _panel.DOAnchorPosX(target, 0.30f)
               .SetEase(_open ? Ease.InCubic : Ease.OutCubic)
