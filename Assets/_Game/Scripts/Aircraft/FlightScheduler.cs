@@ -361,9 +361,9 @@ public class FlightScheduler : MonoBehaviour
         if (FlightNotificationSystem.Instance == null) return;
         string msg = status switch
         {
-            FlightStatus.Approaching => $"✈ {flight.FlightNumber} en approche",
-            FlightStatus.AtGate      => $"✈ {flight.FlightNumber} à la gate {flight.GateLabel}",
-            FlightStatus.Departed    => $"✈ {flight.FlightNumber} décollé — +50 000 $",
+            FlightStatus.Approaching => $"[VOL] {flight.FlightNumber} en approche",
+            FlightStatus.AtGate      => $"[VOL] {flight.FlightNumber} à la gate {flight.GateLabel}",
+            FlightStatus.Departed    => $"[VOL] {flight.FlightNumber} décollé — +50 000 $",
             _                        => null
         };
         if (msg != null) FlightNotificationSystem.Instance.Show(msg);
