@@ -506,7 +506,7 @@ public class FlightScheduler : MonoBehaviour
             p.transform.localPosition = pos;
             p.transform.localScale    = scale;
             p.GetComponent<MeshRenderer>().sharedMaterial = mat;
-            Object.Destroy(p.GetComponent<BoxCollider>());
+            UnityEngine.Object.Destroy(p.GetComponent<BoxCollider>());
         }
 
         MakePart("Body",  Vector3.zero,            new Vector3(20f, 2f, 4f));
