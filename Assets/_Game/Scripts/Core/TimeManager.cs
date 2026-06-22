@@ -19,6 +19,9 @@ public class TimeManager : MonoBehaviour
     [ShowInInspector, ReadOnly, FoldoutGroup("Runtime")]
     public int SpeedMultiplier => _speeds[_speedIndex];
 
+    /// <summary>Time.timeScale appliqué (1 / 2 / 4). Utilisé par DOTween et Unity automatiquement.</summary>
+    public float TimeScale { get; private set; } = 1f;
+
     public float CurrentHour => _currentHour;
 
     private float _currentHour;
@@ -32,6 +35,7 @@ public class TimeManager : MonoBehaviour
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         _currentHour = startHour;
+        ApplyTimeScale();
     }
 
     private void Update()
@@ -47,13 +51,23 @@ public class TimeManager : MonoBehaviour
         if (!kb.tKey.wasPressedThisFrame) return;
 
         _speedIndex = (_speedIndex + 1) % _speeds.Length;
+        ApplyTimeScale();
         OnTimeChanged?.Invoke(CurrentTimeString, SpeedMultiplier);
+    }
+
+    private void ApplyTimeScale()
+    {
+        TimeScale          = SpeedMultiplier;
+        Time.timeScale     = TimeScale;
     }
 
     private void AdvanceTime()
     {
+        // On utilise unscaledDeltaTime : Time.timeScale accélère déjà tout le reste
+        // (DOTween, physics, coroutines WaitForSeconds…).
+        // La formule de l'horloge virtuelle reste identique, indépendante de timeScale.
         float minutesPerSecond = SpeedMultiplier / realSecondsPerGameMinute;
-        _currentHour += Time.deltaTime * minutesPerSecond / 60f;
+        _currentHour += Time.unscaledDeltaTime * minutesPerSecond / 60f;
         if (_currentHour >= 24f) _currentHour -= 24f;
 
         OnTimeChanged?.Invoke(CurrentTimeString, SpeedMultiplier);

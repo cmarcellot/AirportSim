@@ -189,10 +189,11 @@ public class Aircraft : MonoBehaviour
     {
         _gateTimer = 3f * 60f; // 3 min de jeu → secondes
 
+        // Time.timeScale == SpeedMultiplier (géré par TimeManager) :
+        // Time.deltaTime est déjà mis à l'échelle, pas besoin de multiplier.
         while (_gateTimer > 0f && !_forceDeparture)
         {
-            float spd = TimeManager.Instance != null ? TimeManager.Instance.SpeedMultiplier : 1f;
-            _gateTimer -= Time.deltaTime * spd;
+            _gateTimer -= Time.deltaTime;
             yield return null;
         }
 
