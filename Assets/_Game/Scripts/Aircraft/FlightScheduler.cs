@@ -40,6 +40,7 @@ public class FlightScheduler : MonoBehaviour
     private ZoneSystem        _zones;
     private PathfindingSystem _pathfinding;
     private bool              _ready;
+    public  bool              IsReady => _ready;
 
     private const float CellSize = 4f;
     private const float HalfGrid = 128 * CellSize * 0.5f;
@@ -82,6 +83,10 @@ public class FlightScheduler : MonoBehaviour
         _pendingFlights.Sort((a, b) => a.ScheduledArrival.CompareTo(b.ScheduledArrival));
 
         _ready = true;
+
+        // Notifier l'UI de tous les vols planifiés (statut Scheduled)
+        foreach (var f in _pendingFlights)
+            OnFlightStatusChanged?.Invoke(f);
     }
 
     private void Update()

@@ -36,18 +36,22 @@ public class FlightBoard : MonoBehaviour
 
     private IEnumerator Start()
     {
-        yield return null; // attendre que HUD canvas + FlightScheduler soient prêts
+        // Trouver le FlightScheduler d'abord
+        yield return null;
+        _scheduler = FindAnyObjectByType<FlightScheduler>();
+        if (_scheduler == null) { Debug.LogError("[FlightBoard] FlightScheduler introuvable."); yield break; }
+
+        // Attendre qu'il ait fini de générer les vols avant de construire l'UI
+        yield return new WaitUntil(() => _scheduler.IsReady);
 
         Canvas hud = null;
         foreach (var c in FindObjectsByType<Canvas>())
             if (c.renderMode == RenderMode.ScreenSpaceOverlay) { hud = c; break; }
         if (hud == null) { Debug.LogError("[FlightBoard] Pas de canvas HUD."); yield break; }
 
-        _scheduler = FindAnyObjectByType<FlightScheduler>();
-        if (_scheduler == null) { Debug.LogError("[FlightBoard] FlightScheduler introuvable."); yield break; }
-
         BuildUI(hud.transform);
 
+        // Souscrire AVANT RefreshAllRows pour ne manquer aucun événement
         _scheduler.OnFlightStatusChanged += OnStatusChanged;
         RefreshAllRows();
     }
