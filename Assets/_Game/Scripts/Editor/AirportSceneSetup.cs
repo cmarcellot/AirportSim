@@ -1183,6 +1183,80 @@ public static class AirportSceneSetup
             "Sauvegarde (Ctrl+S) puis Play.", "OK");
     }
 
+    // ── Fix — Durées de service ───────────────────────────────────────────
+
+    [MenuItem("AirportSim/Fix Service Durations", true)]
+    public static bool FixServiceDurationsValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Fix Service Durations")]
+    public static void FixServiceDurations()
+    {
+        int patched = 0;
+
+        // Patcher les prefabs dans Assets
+        patched += PatchDuration<FuelTruck>(
+            "Assets/_Game/Prefabs/Vehicles/FuelTruck.prefab",
+            "serviceDurationMinutes", 0.5f);
+
+        patched += PatchDuration<CateringTruck>(
+            "Assets/_Game/Prefabs/Vehicles/CateringTruck.prefab",
+            "serviceDurationMinutes", 0.75f);
+
+        patched += PatchDuration<BaggageTruck>(
+            "Assets/_Game/Prefabs/Vehicles/BaggageTruck.prefab",
+            "serviceDurationMinutes", 1f);
+
+        // Patcher aussi les instances dans la scène (véhicules déjà spawned)
+        foreach (var t in Object.FindObjectsByType<FuelTruck>())
+        {
+            var so = new SerializedObject(t);
+            so.FindProperty("serviceDurationMinutes").floatValue = 0.5f;
+            so.ApplyModifiedProperties();
+            patched++;
+        }
+        foreach (var t in Object.FindObjectsByType<CateringTruck>())
+        {
+            var so = new SerializedObject(t);
+            so.FindProperty("serviceDurationMinutes").floatValue = 0.75f;
+            so.ApplyModifiedProperties();
+            patched++;
+        }
+        foreach (var t in Object.FindObjectsByType<BaggageTruck>())
+        {
+            var so = new SerializedObject(t);
+            so.FindProperty("serviceDurationMinutes").floatValue = 1f;
+            so.ApplyModifiedProperties();
+            patched++;
+        }
+
+        AssetDatabase.SaveAssets();
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+
+        Debug.Log($"[AirportSim] Fix Service Durations : {patched} objet(s) patché(s).");
+        EditorUtility.DisplayDialog("AirportSim",
+            $"Fix Service Durations terminé ({patched} objet(s)) !\n\n" +
+            "• FuelTruck    : 0.5 min (30 s)\n" +
+            "• CateringTruck : 0.75 min (45 s)\n" +
+            "• BaggageTruck  : 1 min (60 s)\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.", "OK");
+    }
+
+    private static int PatchDuration<T>(string prefabPath, string fieldName, float value)
+        where T : MonoBehaviour
+    {
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        if (prefab == null) return 0;
+        var comp = prefab.GetComponent<T>();
+        if (comp == null) return 0;
+        var so = new SerializedObject(comp);
+        var prop = so.FindProperty(fieldName);
+        if (prop == null) return 0;
+        prop.floatValue = value;
+        so.ApplyModifiedProperties();
+        EditorUtility.SetDirty(prefab);
+        return 1;
+    }
+
     private static void EnsureFolder(string parent, string name)
     {
         string path = parent + "/" + name;
