@@ -739,6 +739,37 @@ public static class AirportSceneSetup
         Debug.Log("[AirportSim] EventSystem ajouté (InputSystemUIInputModule).");
     }
 
+    // ── Setup 2E — Flight Planning & FlightBoard ──────────────────────────
+
+    [MenuItem("AirportSim/Setup 2E - Flight Planning", true)]
+    public static bool Setup2EValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 2E - Flight Planning")]
+    public static void Setup2E()
+    {
+        // FlightNotificationSystem
+        if (Object.FindObjectsByType<FlightNotificationSystem>().Length == 0)
+        {
+            var ns = new GameObject("FlightNotificationSystem");
+            ns.AddComponent<FlightNotificationSystem>();
+        }
+
+        // FlightBoard
+        if (Object.FindObjectsByType<FlightBoard>().Length == 0)
+        {
+            var fb = new GameObject("FlightBoard");
+            fb.AddComponent<FlightBoard>();
+        }
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        EditorUtility.DisplayDialog("AirportSim",
+            "Setup 2E terminé !\n\n" +
+            "• FlightNotificationSystem ajouté (toasts vols)\n" +
+            "• FlightBoard ajouté (touche F pour ouvrir)\n\n" +
+            "Le FlightScheduler génère des vols automatiquement.\n" +
+            "Ajoutez des FlightData assets pour un planning manuel.", "OK");
+    }
+
     // ── Setup 2C — Gates & Taxi ────────────────────────────────────────────
 
     [MenuItem("AirportSim/Setup 2C - Gates and Taxi", true)]

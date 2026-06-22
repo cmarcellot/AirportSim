@@ -1,43 +1,62 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
 using Sirenix.OdinInspector;
+using UnityEngine;
 
 /// <summary>
-/// Fait apparaître des avions à intervalles réguliers, les assigne aux pistes
-/// disponibles, puis gère le taxi vers une gate via PathfindingSystem.
+/// Gère le planning des vols, le spawn des avions sur les pistes,
+/// l'assignation des gates, et diffuse les événements vers le FlightBoard.
 /// </summary>
 public class FlightScheduler : MonoBehaviour
 {
-    // ── Config ─────────────────────────────────────────────────────────────
-    [FoldoutGroup("Flight Scheduler")]
-    [SerializeField] private AircraftData aircraftData;
+    // ── Configuration ──────────────────────────────────────────────────────
+    [FoldoutGroup("Scheduled Flights")]
+    [Tooltip("Vols planifiés manuellement. Si vide, des vols aléatoires sont générés.")]
+    [SerializeField] private List<FlightData> scheduledFlights = new();
 
-    [FoldoutGroup("Flight Scheduler")]
-    [Tooltip("Intervalle entre deux arrivées (minutes de jeu)")]
-    [SerializeField] private float spawnIntervalMinutes = 2f;
+    [FoldoutGroup("Scheduled Flights")]
+    [Tooltip("Intervalle en minutes de jeu entre deux vols auto-générés")]
+    [SerializeField] private float autoSpawnIntervalMinutes = 3f;
 
-    // ── Stats ──────────────────────────────────────────────────────────────
-    [FoldoutGroup("Flight Scheduler"), ShowInInspector, ReadOnly]
-    private float _timerMinutes;
+    [FoldoutGroup("Scheduled Flights")]
+    [Tooltip("Nombre de vols auto-générés si la liste est vide")]
+    [SerializeField] private int autoFlightCount = 20;
 
-    [FoldoutGroup("Flight Scheduler"), ShowInInspector, ReadOnly]
-    private int _totalSpawned;
+    // ── Runtime inspector ──────────────────────────────────────────────────
+    [FoldoutGroup("Active Flights"), ShowInInspector, ReadOnly]
+    private List<ActiveFlight> _activeFlights = new();
 
-    // ── Runtime ────────────────────────────────────────────────────────────
+    [FoldoutGroup("Active Flights"), ShowInInspector, ReadOnly]
+    private List<ActiveFlight> _pendingFlights = new();
+
+    [FoldoutGroup("Active Flights"), ShowInInspector, ReadOnly]
+    private List<ActiveFlight> _waitingFlights = new(); // prêts mais en attente runway/gate
+
+    // ── Événements UI ──────────────────────────────────────────────────────
+    public event Action<ActiveFlight> OnFlightStatusChanged;
+
+    // ── Interne ────────────────────────────────────────────────────────────
     private ZoneSystem        _zones;
     private PathfindingSystem _pathfinding;
     private bool              _ready;
 
     private const float CellSize = 4f;
-    private const float HalfGrid = 128 * CellSize * 0.5f; // 256
+    private const float HalfGrid = 128 * CellSize * 0.5f;
 
     private readonly Dictionary<float, Aircraft> _runwayOccupants = new();
 
-    private struct RunwayInfo
+    private static readonly (string airline, string prefix, Color color)[] Airlines =
     {
-        public float StartX, EndX, CenterZ;
-    }
+        ("Air France",      "AF",  new Color(0.01f, 0.34f, 0.72f)),
+        ("KLM",             "KL",  new Color(0.00f, 0.46f, 0.69f)),
+        ("Lufthansa",       "LH",  new Color(0.97f, 0.77f, 0.01f)),
+        ("British Airways", "BA",  new Color(0.47f, 0.09f, 0.12f)),
+        ("EasyJet",         "EZY", new Color(1.00f, 0.55f, 0.00f)),
+        ("Ryanair",         "FR",  new Color(0.00f, 0.45f, 0.10f)),
+    };
+
+    private struct RunwayInfo { public float StartX, EndX, CenterZ; }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -49,41 +68,42 @@ public class FlightScheduler : MonoBehaviour
 
     private IEnumerator Start()
     {
-        // Attendre une frame que AirportEnvironment.Start() ait peint les zones
-        yield return null;
+        yield return null; // attendre AirportEnvironment.Start()
 
         if (_zones != null) PaintRunwayConnectors();
 
-        // Premier avion quasi-immédiatement
-        _timerMinutes = spawnIntervalMinutes - 0.1f;
-        _ready        = true;
+        // Construire la liste de vols planifiés
+        if (scheduledFlights.Count > 0)
+            BuildPendingFromAssets();
+        else
+            GenerateRandomSchedule();
+
+        // Trier par heure d'arrivée
+        _pendingFlights.Sort((a, b) => a.ScheduledArrival.CompareTo(b.ScheduledArrival));
+
+        _ready = true;
     }
 
     private void Update()
     {
         if (!_ready) return;
-
-        float spd = TimeManager.Instance != null ? TimeManager.Instance.SpeedMultiplier : 1;
-        _timerMinutes += Time.deltaTime * spd;
-
-        if (_timerMinutes >= spawnIntervalMinutes)
-        {
-            _timerMinutes -= spawnIntervalMinutes;
-            TrySpawnAircraft();
-        }
+        CheckPendingFlights();
+        RetryWaitingFlights();
+        PollActiveFlights();
     }
 
     // ── API publique ───────────────────────────────────────────────────────
 
-    [Button("Spawn Test Aircraft"), FoldoutGroup("Flight Scheduler")]
-    public void SpawnTestAircraft()
+    /// <summary>Retourne tous les vols (pending + waiting + actifs) pour le FlightBoard.</summary>
+    public List<ActiveFlight> GetAllFlights()
     {
-        if (!Application.isPlaying)
-        { Debug.LogWarning("[FlightScheduler] Disponible uniquement en Play."); return; }
-        TrySpawnAircraft();
+        var all = new List<ActiveFlight>(_pendingFlights);
+        all.AddRange(_waitingFlights);
+        all.AddRange(_activeFlights);
+        all.Sort((a, b) => a.ScheduledArrival.CompareTo(b.ScheduledArrival));
+        return all;
     }
 
-    /// <summary>Cherche une gate libre et déclenche le taxi de l'avion.</summary>
     public void AssignGateToAircraft(Aircraft aircraft)
     {
         if (aircraft == null) return;
@@ -95,11 +115,11 @@ public class FlightScheduler : MonoBehaviour
 
         if (chosen == null)
         {
-            Debug.Log("[FlightScheduler] Aucune gate disponible — l'avion reste sur la piste.");
+            Debug.Log("[FlightScheduler] Aucune gate disponible.");
             return;
         }
 
-        chosen.Reserve(); // réservée avant que l'avion n'arrive
+        chosen.Reserve();
 
         List<Vector3> path = null;
         if (_pathfinding != null)
@@ -107,53 +127,130 @@ public class FlightScheduler : MonoBehaviour
 
         if (path == null || path.Count == 0)
         {
-            Debug.LogWarning($"[FlightScheduler] Pas de chemin airside vers {chosen.name}. " +
-                             "Vérifiez que les zones Runway/Taxiway/Apron sont connectées.");
+            Debug.LogWarning("[FlightScheduler] Pas de chemin airside vers la gate.");
             chosen.ReleaseAircraft();
             return;
         }
 
-        // La piste est libérée dès que l'avion commence à rouler
         FreeRunwayOf(aircraft);
         aircraft.StartTaxi(path, chosen);
 
-        Debug.Log($"[FlightScheduler] {aircraft.name} → {chosen.name} ({path.Count} waypoints)");
+        // Mettre à jour le vol actif correspondant
+        var flight = FindActiveFlightFor(aircraft);
+        if (flight != null)
+        {
+            flight.AssignedGate = chosen;
+            OnFlightStatusChanged?.Invoke(flight);
+        }
     }
 
-    // ── Spawn ──────────────────────────────────────────────────────────────
+    // ── Odin buttons ───────────────────────────────────────────────────────
 
-    private void TrySpawnAircraft()
+    [Button("Add Random Flight"), FoldoutGroup("Scheduled Flights")]
+    public void AddRandomFlight()
     {
-        if (aircraftData == null)
-        { Debug.LogWarning("[FlightScheduler] AircraftData non assigné."); return; }
-        if (_zones == null) _zones = FindAnyObjectByType<ZoneSystem>();
+        if (!Application.isPlaying) return;
+        float hour  = TimeManager.Instance != null
+                      ? TimeManager.Instance.CurrentHour + 0.05f // +3 min de jeu
+                      : 6.1f;
+        var flight = MakeRandomFlight(hour);
+        _pendingFlights.Add(flight);
+        OnFlightStatusChanged?.Invoke(flight);
+        Debug.Log($"[FlightScheduler] Vol ajouté : {flight}");
+    }
 
-        // Ne spawner que s'il y a plus de gates libres que d'avions déjà en approche
-        var gates = FindObjectsByType<Gate>();
-        if (gates.Length > 0)
+    [Button("Clear All Flights"), FoldoutGroup("Scheduled Flights")]
+    public void ClearAllFlights()
+    {
+        if (!Application.isPlaying) return;
+        foreach (var f in _activeFlights)
+            if (f.Aircraft != null) Destroy(f.Aircraft.gameObject);
+        _activeFlights.Clear();
+        _pendingFlights.Clear();
+        _waitingFlights.Clear();
+        _runwayOccupants.Clear();
+    }
+
+    // ── Scheduling ─────────────────────────────────────────────────────────
+
+    private void BuildPendingFromAssets()
+    {
+        foreach (var data in scheduledFlights)
         {
-            int freeGates = 0;
-            foreach (var g in gates) if (g.IsAvailable()) freeGates++;
-
-            int inbound = 0;
-            foreach (var ac in FindObjectsByType<Aircraft>())
-                if (ac.State == AircraftState.Approaching ||
-                    ac.State == AircraftState.Landing     ||
-                    ac.State == AircraftState.Idle) inbound++;
-
-            if (freeGates <= inbound)
+            if (data == null) continue;
+            _pendingFlights.Add(new ActiveFlight
             {
-                Debug.Log($"[FlightScheduler] Gates libres ({freeGates}) ≤ avions en approche ({inbound}) — spawn suspendu.");
-                return;
-            }
+                FlightNumber     = data.flightNumber,
+                Airline          = data.airline,
+                AirlineColor     = data.airlineColor,
+                ScheduledArrival = data.scheduledArrival,
+                AircraftType     = data.aircraftType,
+                Status           = FlightStatus.Scheduled,
+            });
+        }
+    }
+
+    private void GenerateRandomSchedule()
+    {
+        float startHour = TimeManager.Instance != null
+                          ? TimeManager.Instance.CurrentHour + 0.05f
+                          : 6.1f;
+        float intervalH = autoSpawnIntervalMinutes / 60f;
+
+        for (int i = 0; i < autoFlightCount; i++)
+            _pendingFlights.Add(MakeRandomFlight(startHour + i * intervalH));
+    }
+
+    private void CheckPendingFlights()
+    {
+        if (TimeManager.Instance == null) return;
+        float now = TimeManager.Instance.CurrentHour;
+
+        for (int i = _pendingFlights.Count - 1; i >= 0; i--)
+        {
+            var f = _pendingFlights[i];
+            if (now < f.ScheduledArrival) continue;
+            _pendingFlights.RemoveAt(i);
+            TrySpawnFlight(f);
+        }
+    }
+
+    private void RetryWaitingFlights()
+    {
+        for (int i = _waitingFlights.Count - 1; i >= 0; i--)
+        {
+            var f = _waitingFlights[i];
+            if (!CanSpawn()) break; // plus de place, inutile de continuer
+            _waitingFlights.RemoveAt(i);
+            TrySpawnFlight(f);
+        }
+    }
+
+    private bool CanSpawn()
+    {
+        // Gates libres > avions déjà en approche
+        var gates = FindObjectsByType<Gate>();
+        if (gates.Length == 0) return false;
+        int free = 0;
+        foreach (var g in gates) if (g.IsAvailable()) free++;
+        int inbound = 0;
+        foreach (var ac in FindObjectsByType<Aircraft>())
+            if (ac.State == AircraftState.Approaching ||
+                ac.State == AircraftState.Landing     ||
+                ac.State == AircraftState.Idle) inbound++;
+        return free > inbound;
+    }
+
+    private void TrySpawnFlight(ActiveFlight flight)
+    {
+        if (!CanSpawn())
+        {
+            _waitingFlights.Add(flight);
+            return;
         }
 
         PurgeDestroyedAircraft();
-
         var runways = FindRunways();
-        if (runways.Count == 0)
-        { Debug.Log("[FlightScheduler] Aucune piste Runway dans ZoneSystem."); return; }
-
         RunwayInfo? chosen = null;
         foreach (var rw in runways)
         {
@@ -162,27 +259,114 @@ public class FlightScheduler : MonoBehaviour
         }
 
         if (chosen == null)
-        { Debug.Log("[FlightScheduler] Toutes les pistes occupées."); return; }
+        {
+            _waitingFlights.Add(flight);
+            return;
+        }
 
-        SpawnOn(chosen.Value);
+        SpawnOn(chosen.Value, flight);
     }
 
-    private void SpawnOn(RunwayInfo runway)
+    // ── Spawn ──────────────────────────────────────────────────────────────
+
+    private void SpawnOn(RunwayInfo runway, ActiveFlight flight)
     {
-        var go = aircraftData.prefab != null
-            ? Instantiate(aircraftData.prefab)
-            : BuildDefaultModel();
+        // Choisir l'AircraftData : celle du vol ou la première disponible dans la scène
+        AircraftData data = flight.AircraftType;
+        if (data == null)
+        {
+            // Récupérer la première AircraftData connue via un autre flight ou un composant existant
+            var existingScheduler = this;
+            data = null;
+            // Fallback : chercher dans les assets ScriptableObject en mémoire
+            foreach (var f in scheduledFlights) if (f != null && f.aircraftType != null) { data = f.aircraftType; break; }
+        }
 
-        go.name = $"Aircraft_{aircraftData.aircraftName}_{_totalSpawned}";
+        var prefabGo = (data != null && data.prefab != null) ? Instantiate(data.prefab) : BuildDefaultModel();
+        prefabGo.name = $"Aircraft_{flight.FlightNumber}";
 
-        var aircraft = go.AddComponent<Aircraft>();
+        var aircraft = prefabGo.AddComponent<Aircraft>();
         aircraft.OnLanded += OnAircraftLanded;
-        aircraft.Initialize(aircraftData, runway.StartX, runway.EndX, runway.CenterZ);
+
+        // Utiliser AircraftData fictive si nécessaire (vitesses par défaut)
+        if (data == null) data = ScriptableObject.CreateInstance<AircraftData>();
+        aircraft.Initialize(data, runway.StartX, runway.EndX, runway.CenterZ);
 
         _runwayOccupants[runway.CenterZ] = aircraft;
-        _totalSpawned++;
 
-        Debug.Log($"[FlightScheduler] {go.name} → piste Z={runway.CenterZ:0}");
+        flight.Aircraft = aircraft;
+        flight.Status   = FlightStatus.Approaching;
+        _activeFlights.Add(flight);
+
+        OnFlightStatusChanged?.Invoke(flight);
+        Notify(flight, FlightStatus.Approaching);
+
+        Debug.Log($"[FlightScheduler] {flight.FlightNumber} → piste Z={runway.CenterZ:0}");
+    }
+
+    // ── Polling état vols ──────────────────────────────────────────────────
+
+    private void PollActiveFlights()
+    {
+        foreach (var flight in _activeFlights)
+        {
+            if (flight.Aircraft != null)
+            {
+                // Capture gate dès qu'elle est assignée
+                if (flight.AssignedGate == null && flight.Aircraft.AssignedGate != null)
+                {
+                    flight.AssignedGate = flight.Aircraft.AssignedGate;
+                    OnFlightStatusChanged?.Invoke(flight);
+                }
+
+                var newStatus = MapState(flight.Aircraft.State);
+                if (newStatus != flight.Status)
+                    UpdateFlightStatus(flight, newStatus);
+            }
+            else if (flight.Status != FlightStatus.Departed &&
+                     flight.Status != FlightStatus.Scheduled)
+            {
+                // Aircraft détruit → décollé
+                UpdateFlightStatus(flight, FlightStatus.Departed);
+            }
+        }
+    }
+
+    private void UpdateFlightStatus(ActiveFlight flight, FlightStatus newStatus)
+    {
+        flight.Status = newStatus;
+        OnFlightStatusChanged?.Invoke(flight);
+        Notify(flight, newStatus);
+    }
+
+    private static FlightStatus MapState(AircraftState s) => s switch
+    {
+        AircraftState.Approaching     => FlightStatus.Approaching,
+        AircraftState.Landing         => FlightStatus.Landing,
+        AircraftState.Idle            => FlightStatus.Landing,
+        AircraftState.Taxiing         => FlightStatus.Landing,
+        AircraftState.AtGate          => FlightStatus.AtGate,
+        AircraftState.Boarding        => FlightStatus.AtGate,
+        AircraftState.Departing       => FlightStatus.Departing,
+        AircraftState.TaxiingToRunway => FlightStatus.Departing,
+        AircraftState.TakingOff       => FlightStatus.Departing,
+        AircraftState.Departed        => FlightStatus.Departed,
+        _                             => FlightStatus.Scheduled
+    };
+
+    // ── Notifications ──────────────────────────────────────────────────────
+
+    private static void Notify(ActiveFlight flight, FlightStatus status)
+    {
+        if (FlightNotificationSystem.Instance == null) return;
+        string msg = status switch
+        {
+            FlightStatus.Approaching => $"✈ {flight.FlightNumber} en approche",
+            FlightStatus.AtGate      => $"✈ {flight.FlightNumber} à la gate {flight.GateLabel}",
+            FlightStatus.Departed    => $"✈ {flight.FlightNumber} décollé — +50 000 $",
+            _                        => null
+        };
+        if (msg != null) FlightNotificationSystem.Instance.Show(msg);
     }
 
     // ── Callback atterrissage ──────────────────────────────────────────────
@@ -193,19 +377,35 @@ public class FlightScheduler : MonoBehaviour
         AssignGateToAircraft(aircraft);
     }
 
-    // ── Connecteur de zones ────────────────────────────────────────────────
-    // Peint les cellules manquantes entre le haut des taxiways et le bas des pistes,
-    // ainsi qu'entre les bandes de pistes, afin de rendre le graphe airside connexe.
+    // ── Générateur aléatoire ───────────────────────────────────────────────
+
+    private int _flightCounter;
+
+    private ActiveFlight MakeRandomFlight(float scheduledHour)
+    {
+        var (airline, prefix, color) = Airlines[_flightCounter % Airlines.Length];
+        _flightCounter++;
+        int num = 1000 + UnityEngine.Random.Range(0, 9000);
+        return new ActiveFlight
+        {
+            FlightNumber     = $"{prefix}{num}",
+            Airline          = airline,
+            AirlineColor     = color,
+            ScheduledArrival = scheduledHour,
+            AircraftType     = null,
+            Status           = FlightStatus.Scheduled,
+        };
+    }
+
+    // ── Connexion zones ────────────────────────────────────────────────────
 
     private void PaintRunwayConnectors()
     {
         var allRunway = _zones.GetAllCellsOfZone(ZoneType.Runway);
         var allTaxi   = _zones.GetAllCellsOfZone(ZoneType.Taxiway);
-
         if (allRunway == null || allRunway.Count == 0) return;
         if (allTaxi   == null || allTaxi.Count   == 0) return;
 
-        // Borne supérieure des taxiways et plage X des colonnes verticales
         int maxTaxiY = 0, minTaxiX = int.MaxValue, maxTaxiX = 0;
         foreach (var c in allTaxi)
         {
@@ -214,36 +414,26 @@ public class FlightScheduler : MonoBehaviour
             if (c.x > maxTaxiX) maxTaxiX = c.x;
         }
 
-        // Borne supérieure des pistes (Y max toutes pistes)
         int maxRunwayY = 0;
         var runwayYSet = new HashSet<int>();
-        foreach (var c in allRunway)
-        {
-            if (c.y > maxRunwayY) maxRunwayY = c.y;
-            runwayYSet.Add(c.y);
-        }
+        foreach (var c in allRunway) { if (c.y > maxRunwayY) maxRunwayY = c.y; runwayYSet.Add(c.y); }
 
-        if (maxRunwayY <= maxTaxiY) return; // déjà connecté
+        if (maxRunwayY <= maxTaxiY) return;
 
-        // Remplie tous les trous entre le sommet des taxiways et le sommet des pistes
         var connectors = new List<Vector2Int>();
         for (int y = maxTaxiY + 1; y <= maxRunwayY; y++)
-        {
-            if (!runwayYSet.Contains(y)) // c'est un trou
-            {
+            if (!runwayYSet.Contains(y))
                 for (int x = minTaxiX; x <= maxTaxiX; x++)
                     connectors.Add(new Vector2Int(x, y));
-            }
-        }
 
         if (connectors.Count > 0)
         {
             _zones.SetZoneBatch(connectors, ZoneType.Taxiway);
-            Debug.Log($"[FlightScheduler] {connectors.Count} cellules taxiway connecteur peintes.");
+            Debug.Log($"[FlightScheduler] {connectors.Count} cellules connecteur peintes.");
         }
     }
 
-    // ── Détection des pistes ───────────────────────────────────────────────
+    // ── Détection pistes ───────────────────────────────────────────────────
 
     private List<RunwayInfo> FindRunways()
     {
@@ -271,23 +461,20 @@ public class FlightScheduler : MonoBehaviour
 
             if (bandMaxX - bandMinX < 8) continue;
 
-            float worldMinX = bandMinX * CellSize - HalfGrid;
-            float worldMaxX = (bandMaxX + 1) * CellSize - HalfGrid;
-            float worldMinZ = bandMinY * CellSize - HalfGrid;
-            float worldMaxZ = (bandMaxY + 1) * CellSize - HalfGrid;
-
             result.Add(new RunwayInfo
             {
-                StartX  = worldMinX,
-                EndX    = worldMaxX,
-                CenterZ = (worldMinZ + worldMaxZ) * 0.5f,
+                StartX  = bandMinX * CellSize - HalfGrid,
+                EndX    = (bandMaxX + 1) * CellSize - HalfGrid,
+                CenterZ = ((bandMinY * CellSize - HalfGrid) + ((bandMaxY + 1) * CellSize - HalfGrid)) * 0.5f,
             });
         }
-
         return result;
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
+
+    private ActiveFlight FindActiveFlightFor(Aircraft aircraft) =>
+        _activeFlights.Find(f => f.Aircraft == aircraft);
 
     private void FreeRunwayOf(Aircraft aircraft)
     {
@@ -302,40 +489,29 @@ public class FlightScheduler : MonoBehaviour
         var toRemove = new List<float>();
         foreach (var (cz, ac) in _runwayOccupants)
             if (ac == null) toRemove.Add(cz);
-        foreach (var cz in toRemove)
-            _runwayOccupants.Remove(cz);
+        foreach (var cz in toRemove) _runwayOccupants.Remove(cz);
     }
 
     private static GameObject BuildDefaultModel()
     {
         var mat  = new Material(Shader.Find("Universal Render Pipeline/Lit"));
         mat.color = Color.white;
+        var root  = new GameObject("AircraftModel");
 
-        var root = new GameObject("AircraftModel");
+        void MakePart(string n, Vector3 pos, Vector3 scale)
+        {
+            var p = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            p.name = n;
+            p.transform.SetParent(root.transform);
+            p.transform.localPosition = pos;
+            p.transform.localScale    = scale;
+            p.GetComponent<MeshRenderer>().sharedMaterial = mat;
+            Object.Destroy(p.GetComponent<BoxCollider>());
+        }
 
-        var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        body.name = "Body";
-        body.transform.SetParent(root.transform);
-        body.transform.localScale = new Vector3(20f, 2f, 4f);
-        body.GetComponent<MeshRenderer>().sharedMaterial = mat;
-        Object.Destroy(body.GetComponent<BoxCollider>());
-
-        var wings = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        wings.name = "Wings";
-        wings.transform.SetParent(root.transform);
-        wings.transform.localPosition = new Vector3(0f, -0.4f, 0f);
-        wings.transform.localScale    = new Vector3(5f, 0.4f, 18f);
-        wings.GetComponent<MeshRenderer>().sharedMaterial = mat;
-        Object.Destroy(wings.GetComponent<BoxCollider>());
-
-        var tail = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        tail.name = "Tail";
-        tail.transform.SetParent(root.transform);
-        tail.transform.localPosition = new Vector3(-8f, 2f, 0f);
-        tail.transform.localScale    = new Vector3(3f, 3f, 0.6f);
-        tail.GetComponent<MeshRenderer>().sharedMaterial = mat;
-        Object.Destroy(tail.GetComponent<BoxCollider>());
-
+        MakePart("Body",  Vector3.zero,            new Vector3(20f, 2f, 4f));
+        MakePart("Wings", new Vector3(0f, -0.4f, 0f), new Vector3(5f, 0.4f, 18f));
+        MakePart("Tail",  new Vector3(-8f, 2f, 0f),   new Vector3(3f, 3f, 0.6f));
         return root;
     }
 }

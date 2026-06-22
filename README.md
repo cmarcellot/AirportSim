@@ -113,6 +113,13 @@ Assets/
 - **FlightScheduler** : détecte les pistes via ZoneSystem, fait apparaître un avion toutes les 2 min de jeu (respecte `SpeedMultiplier`), `[Button] Spawn Test Aircraft`
 - **Prefab Boeing 737** : corps + ailes + dérive (cubes blancs)
 
+### Étape 2E — Planning basique des vols ✅ `v0.11.0`
+- **FlightData** (ScriptableObject) : numéro, compagnie, couleur, AircraftData, heure d'arrivée/départ
+- **FlightScheduler** réécrit : liste de vols planifiés (Odin), génération auto si liste vide, file d'attente si piste/gate indisponible, polling état avions, événements UI
+- **FlightBoard** : panneau latéral droit togglé avec F, liste scrollable des vols (numéro, compagnie colorée, heure, gate, statut), animation DOTween slide
+- **FlightNotificationSystem** : toasts en haut à droite (slide-in/fade-out DOTween) pour chaque événement de vol (en approche / à la gate / décollé)
+- **Setup 2E** : menu `AirportSim → Setup 2E - Flight Planning`
+
 ### Étape 2D — Avion décollage ✅ `v0.10.0`
 - **Cycle complet d'un vol** : AtGate 3 min (jeu) → Departing → TaxiingToRunway → TakingOff → Departed
 - **Pushback** : DOTween recul depuis la gate (~20 u en sens inverse du cap d'arrivée)
