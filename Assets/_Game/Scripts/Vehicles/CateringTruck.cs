@@ -12,7 +12,7 @@ using UnityEngine.UI;
 public class CateringTruck : GroundVehicle
 {
     [FoldoutGroup("Catering State")]
-    [SerializeField, ShowInInspector] private float serviceDurationMinutes = 0.75f; // 45 s
+    [SerializeField, ShowInInspector] private float serviceMinutes = 0.75f; // 45 s
 
     [FoldoutGroup("Catering State"), ShowInInspector, ReadOnly]
     public float PlatformHeight { get; private set; }
@@ -85,7 +85,7 @@ public class CateringTruck : GroundVehicle
     private IEnumerator ServiceCoroutine()
     {
         State = VehicleState.Servicing;
-        float total   = serviceDurationMinutes * 60f;
+        float total   = serviceMinutes * 60f;
         float elapsed = 0f;
 
         SetBarProgress(0f);

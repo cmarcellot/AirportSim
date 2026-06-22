@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class BaggageTruck : GroundVehicle
 {
     [FoldoutGroup("Baggage State")]
-    [SerializeField, ShowInInspector] private float serviceDurationMinutes = 1f; // 60 s
+    [SerializeField, ShowInInspector] private float serviceMinutes = 1f; // 60 s
 
     [FoldoutGroup("Baggage State"), ShowInInspector, ReadOnly]
     public bool TailgateOpen { get; private set; }
@@ -85,7 +85,7 @@ public class BaggageTruck : GroundVehicle
     private IEnumerator ServiceCoroutine()
     {
         State = VehicleState.Servicing;
-        float total   = serviceDurationMinutes * 60f;
+        float total   = serviceMinutes * 60f;
         float elapsed = 0f;
 
         SetBarProgress(0f);

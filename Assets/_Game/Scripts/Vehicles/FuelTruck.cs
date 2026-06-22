@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class FuelTruck : GroundVehicle
 {
     [FoldoutGroup("Fuel Service")]
-    [SerializeField, ShowInInspector] private float serviceDurationMinutes = 0.5f; // 30 s
+    [SerializeField, ShowInInspector] private float serviceMinutes = 0.5f; // 30 s
 
     private GameObject _barRoot;
     private Transform  _barFill;       // scale.x : 0 = vide  →  1 = plein
@@ -50,7 +50,7 @@ public class FuelTruck : GroundVehicle
     private IEnumerator ServiceCoroutine()
     {
         State = VehicleState.Servicing;
-        float total   = serviceDurationMinutes * 60f; // secondes de jeu
+        float total   = serviceMinutes * 60f; // secondes de jeu
         float elapsed = 0f;
 
         SetBarProgress(0f);
