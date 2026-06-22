@@ -12,7 +12,7 @@ using UnityEngine.UI;
 public class CateringTruck : GroundVehicle
 {
     [FoldoutGroup("Catering State")]
-    [SerializeField] private float serviceDurationMinutes = 3f;
+    [SerializeField, ShowInInspector] private float serviceDurationMinutes = 0.75f; // 45 s
 
     [FoldoutGroup("Catering State"), ShowInInspector, ReadOnly]
     public float PlatformHeight { get; private set; }

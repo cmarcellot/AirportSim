@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class FuelTruck : GroundVehicle
 {
     [FoldoutGroup("Fuel Service")]
-    [SerializeField] private float serviceDurationMinutes = 2f;
+    [SerializeField, ShowInInspector] private float serviceDurationMinutes = 0.5f; // 30 s
 
     private GameObject _barRoot;
     private Transform  _barFill;       // scale.x : 0 = vide  →  1 = plein

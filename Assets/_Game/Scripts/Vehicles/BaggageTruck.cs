@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class BaggageTruck : GroundVehicle
 {
     [FoldoutGroup("Baggage State")]
-    [SerializeField] private float serviceDurationMinutes = 4f;
+    [SerializeField, ShowInInspector] private float serviceDurationMinutes = 1f; // 60 s
 
     [FoldoutGroup("Baggage State"), ShowInInspector, ReadOnly]
     public bool TailgateOpen { get; private set; }
