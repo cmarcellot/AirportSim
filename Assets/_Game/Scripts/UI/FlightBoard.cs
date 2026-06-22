@@ -305,7 +305,7 @@ public class FlightBoard : MonoBehaviour
             tmp.fontStyle = style;
             tmp.alignment = i == 0 ? TextAlignmentOptions.MidlineLeft
                                    : TextAlignmentOptions.MidlineLeft;
-            tmp.overflowMode = TextOverflowModes.Ellipsis;
+            tmp.overflowMode = TextOverflowModes.Truncate;
             tmps[i] = tmp;
         }
         return (tmps[0], tmps[1], tmps[2], tmps[3], tmps[4]);
