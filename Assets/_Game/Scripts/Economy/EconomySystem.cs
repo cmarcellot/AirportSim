@@ -13,11 +13,22 @@ public class EconomySystem : MonoBehaviour
 
     public event System.Action<float> OnBudgetChanged;
 
+    // Réinitialise le pointeur statique avant chaque session (Domain Reload désactivé).
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() { Instance = null; }
+
     private void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
+    }
+
+    private void OnEnable()
+    {
+        // Appelé à chaque entrée en Play Mode, même sans Scene Reload.
+        if (Instance == null) Instance = this;
         Budget = startingBudget;
+        OnBudgetChanged?.Invoke(Budget);
     }
 
     public bool TrySpend(float amount)

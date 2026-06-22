@@ -30,12 +30,24 @@ public class TimeManager : MonoBehaviour
 
     public event System.Action<string, int> OnTimeChanged;
 
+    // Réinitialise le pointeur statique avant chaque session (Domain Reload désactivé).
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() { Instance = null; }
+
     private void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
+    }
+
+    private void OnEnable()
+    {
+        // Appelé à chaque entrée en Play Mode, même sans Scene Reload.
+        if (Instance == null) Instance = this;
         _currentHour = startHour;
+        _speedIndex  = 0;
         ApplyTimeScale();
+        OnTimeChanged?.Invoke(CurrentTimeString, SpeedMultiplier);
     }
 
     private void Update()

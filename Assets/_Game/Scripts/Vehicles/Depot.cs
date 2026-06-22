@@ -56,7 +56,23 @@ public class Depot : MonoBehaviour
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
-    private IEnumerator Start()
+    private void OnEnable()
+    {
+        // Détruire tous les véhicules de la session précédente (sans Scene Reload).
+        foreach (var v in FindObjectsByType<FuelTruck>())     Destroy(v.gameObject);
+        foreach (var v in FindObjectsByType<CateringTruck>()) Destroy(v.gameObject);
+        _idleFuel.Clear();
+        _idleCatering.Clear();
+        _fuelQueue.Clear();
+        _cateringQueue.Clear();
+
+        // Anti-double-subscription : désabonner avant de ré-abonner.
+        if (_scheduler != null) _scheduler.OnFlightStatusChanged -= OnFlightStatus;
+
+        StartCoroutine(Init());
+    }
+
+    private IEnumerator Init()
     {
         yield return null;
 
@@ -67,8 +83,14 @@ public class Depot : MonoBehaviour
         if (_scheduler != null)
             _scheduler.OnFlightStatusChanged += OnFlightStatus;
 
-        BuildIndicator();
+        if (_countLabel == null) BuildIndicator();
         UpdateIndicator();
+    }
+
+    private void OnDisable()
+    {
+        if (_scheduler != null)
+            _scheduler.OnFlightStatusChanged -= OnFlightStatus;
     }
 
     private void OnDestroy()

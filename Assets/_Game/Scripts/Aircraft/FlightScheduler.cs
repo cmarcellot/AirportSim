@@ -67,24 +67,37 @@ public class FlightScheduler : MonoBehaviour
         _pathfinding = FindAnyObjectByType<PathfindingSystem>();
     }
 
-    private IEnumerator Start()
+    private void OnEnable()
     {
-        yield return null; // attendre AirportEnvironment.Start()
+        // Détruire les avions résiduels de la session précédente (sans Scene Reload).
+        foreach (var f in _activeFlights)
+            if (f.Aircraft != null) Destroy(f.Aircraft.gameObject);
+
+        _activeFlights.Clear();
+        _pendingFlights.Clear();
+        _waitingFlights.Clear();
+        _runwayOccupants.Clear();
+        _ready         = false;
+        _flightCounter = 0;
+
+        StartCoroutine(Init());
+    }
+
+    private IEnumerator Init()
+    {
+        yield return null; // attendre AirportEnvironment.Start() / OnEnable()
 
         if (_zones != null) PaintRunwayConnectors();
 
-        // Construire la liste de vols planifiés
         if (scheduledFlights.Count > 0)
             BuildPendingFromAssets();
         else
             GenerateRandomSchedule();
 
-        // Trier par heure d'arrivée
         _pendingFlights.Sort((a, b) => a.ScheduledArrival.CompareTo(b.ScheduledArrival));
 
         _ready = true;
 
-        // Notifier l'UI de tous les vols planifiés (statut Scheduled)
         foreach (var f in _pendingFlights)
             OnFlightStatusChanged?.Invoke(f);
     }

@@ -26,14 +26,32 @@ public class FlightNotificationSystem : MonoBehaviour
 
     private readonly List<RectTransform> _visible = new();
 
+    // Réinitialise le pointeur statique avant chaque session (Domain Reload désactivé).
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() { Instance = null; }
+
     private void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
     }
 
+    private void OnEnable()
+    {
+        // Appelé à chaque entrée en Play Mode, même sans Scene Reload.
+        if (Instance == null) Instance = this;
+        _queue.Clear();
+        _showing = false;
+        _visible.Clear();
+        // Détruire les toasts résiduels de la session précédente
+        if (_container != null)
+            for (int i = _container.childCount - 1; i >= 0; i--)
+                Destroy(_container.GetChild(i).gameObject);
+    }
+
     private IEnumerator Start()
     {
+        if (_container != null) yield break; // déjà construit (scene non rechargée)
         yield return null; // attendre que le HUD canvas existe
 
         Canvas hud = null;

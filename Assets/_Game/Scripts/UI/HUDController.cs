@@ -10,6 +10,14 @@ public class HUDController : MonoBehaviour
     private int   _lastSpeed  = -1;
     private float _lastHour   = -1f;
 
+    private void OnEnable()
+    {
+        // Force un rafraîchissement à la première frame (cache périmé si Scene non rechargée).
+        _lastBudget = -1f;
+        _lastSpeed  = -1;
+        _lastHour   = -1f;
+    }
+
     private void Update()
     {
         RefreshBudget();

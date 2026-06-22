@@ -25,8 +25,28 @@ public class Gate : MonoBehaviour
 
     private void Awake()
     {
-        BuildIndicator();
+        // Guard : BuildIndicator ne s'exécute qu'une fois (idem sans Scene Reload).
+        if (_indicatorT == null)
+            BuildIndicator();
         UpdateIndicator();
+    }
+
+    private void OnEnable()
+    {
+        // Reset état à chaque entrée en Play Mode (même sans Scene Reload).
+        State            = GateState.Available;
+        AssignedAircraft = null;
+        UpdateIndicator();
+
+        // Le tween de pulsation est tué à la sortie du Play Mode → le redémarrer.
+        if (_indicatorT != null)
+        {
+            DOTween.Kill(_indicatorT);
+            _indicatorT.localScale = Vector3.one;
+            _indicatorT.DOScale(Vector3.one * 1.15f, 0.9f)
+                       .SetLoops(-1, LoopType.Yoyo)
+                       .SetEase(Ease.InOutSine);
+        }
     }
 
     // ── API ────────────────────────────────────────────────────────────────

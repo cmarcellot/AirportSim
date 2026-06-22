@@ -34,26 +34,51 @@ public class FlightBoard : MonoBehaviour
         public TextMeshProUGUI Status;
     }
 
-    private IEnumerator Start()
+    private void OnEnable()
     {
-        // Trouver le FlightScheduler d'abord
+        // Anti-double-subscription et reset état visuel (sans Scene Reload).
+        if (_scheduler != null)
+            _scheduler.OnFlightStatusChanged -= OnStatusChanged;
+
+        foreach (var r in _rows) if (r.Root != null) Destroy(r.Root.gameObject);
+        _rows.Clear();
+        _open      = false;
+        _animating = false;
+
+        // Remettre le panneau hors-écran si déjà construit.
+        if (_panel != null)
+            _panel.anchoredPosition = new Vector2(PanelWidth, 0f);
+
+        StartCoroutine(InitBoard());
+    }
+
+    private IEnumerator InitBoard()
+    {
         yield return null;
         _scheduler = FindAnyObjectByType<FlightScheduler>();
         if (_scheduler == null) { Debug.LogError("[FlightBoard] FlightScheduler introuvable."); yield break; }
 
-        // Attendre qu'il ait fini de générer les vols avant de construire l'UI
         yield return new WaitUntil(() => _scheduler.IsReady);
 
-        Canvas hud = null;
-        foreach (var c in FindObjectsByType<Canvas>())
-            if (c.renderMode == RenderMode.ScreenSpaceOverlay) { hud = c; break; }
-        if (hud == null) { Debug.LogError("[FlightBoard] Pas de canvas HUD."); yield break; }
+        // Construire l'UI seulement si elle n'existe pas encore (1re session).
+        if (_panel == null)
+        {
+            Canvas hud = null;
+            foreach (var c in FindObjectsByType<Canvas>())
+                if (c.renderMode == RenderMode.ScreenSpaceOverlay) { hud = c; break; }
+            if (hud == null) { Debug.LogError("[FlightBoard] Pas de canvas HUD."); yield break; }
+            BuildUI(hud.transform);
+        }
 
-        BuildUI(hud.transform);
-
-        // Souscrire AVANT RefreshAllRows pour ne manquer aucun événement
+        // Souscrire AVANT RefreshAllRows pour ne manquer aucun événement.
         _scheduler.OnFlightStatusChanged += OnStatusChanged;
         RefreshAllRows();
+    }
+
+    private void OnDisable()
+    {
+        if (_scheduler != null)
+            _scheduler.OnFlightStatusChanged -= OnStatusChanged;
     }
 
     private void OnDestroy()
