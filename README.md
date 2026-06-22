@@ -113,6 +113,15 @@ Assets/
 - **FlightScheduler** : détecte les pistes via ZoneSystem, fait apparaître un avion toutes les 2 min de jeu (respecte `SpeedMultiplier`), `[Button] Spawn Test Aircraft`
 - **Prefab Boeing 737** : corps + ailes + dérive (cubes blancs)
 
+### Étape 3C — Véhicule au sol : Bagagiste (Baggage Truck) ✅ `v0.14.0`
+- **BaggageTruck** (hérite de GroundVehicle) : durée de service 4 min (temps de jeu), se gare à l'arrière de l'avion (opposé au nez, position calculée via `-aircraft.transform.forward`)
+- **Animation hayon** : cube orange pivoté par DOTween (-90° autour de Z) à l'arrivée — s'ouvre comme une rampe de chargement ; se referme avant le retour au dépôt
+- **Coordination triplex** : les trois trucks (Fuel + Catering + Baggage) servent l'avion en parallèle — départ bloqué tant que `fuelReady && cateringReady && baggageReady` ne sont pas tous vrais
+- **Aircraft.cs** étendu : `SetBaggageReady(bool)`, visible dans l'Inspector Odin
+- **Depot.cs** étendu : troisième pool (BaggageTrucks côté -Z derrière le dépôt), file d'attente indépendante, indicateur trois lignes
+- **Rétrocompatible** : sans Depot, `BaggageReady` vaut `true` par défaut → pas de blocage
+- **Setup 3C** : menu `AirportSim → Setup 3C - Baggage Truck` — crée le prefab BaggageTruck et injecte dans le Depot existant
+
 ### Étape 3B — Véhicule au sol : Catering Truck ✅ `v0.13.0`
 - **CateringTruck** (hérite de GroundVehicle) : durée de service 3 min (temps de jeu), se gare côté opposé au FuelTruck (+X de la gate)
 - **Animation plateforme** : cube bleu élévatrice monte de 3 unités via DOTween au début du service, redescend avant retour au dépôt
@@ -175,8 +184,9 @@ Assets/
 10. Menu **AirportSim → Setup 2E - Flight Planning**
 11. Menu **AirportSim → Setup 3A - Fuel Truck**
 12. Menu **AirportSim → Setup 3B - Catering Truck**
-13. Sauvegarder (`Ctrl+S`)
-14. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
+13. Menu **AirportSim → Setup 3C - Baggage Truck**
+14. Sauvegarder (`Ctrl+S`)
+15. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
 ## Contrôles
 

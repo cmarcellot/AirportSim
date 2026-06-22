@@ -40,15 +40,19 @@ public class Aircraft : MonoBehaviour
     // ── Événements ─────────────────────────────────────────────────────────
     public event Action<Aircraft> OnLanded;
 
-    // ── Services au sol (coordination FuelTruck + CateringTruck) ──────────
+    // ── Services au sol (FuelTruck + CateringTruck + BaggageTruck) ───────
     [FoldoutGroup("Aircraft State"), ShowInInspector, ReadOnly]
     public bool FuelReady { get; private set; } = true;
 
     [FoldoutGroup("Aircraft State"), ShowInInspector, ReadOnly]
     public bool CateringReady { get; private set; } = true;
 
-    public void SetFuelReady(bool ready)     { FuelReady = ready; }
-    public void SetCateringReady(bool ready) { CateringReady = ready; }
+    [FoldoutGroup("Aircraft State"), ShowInInspector, ReadOnly]
+    public bool BaggageReady { get; private set; } = true;
+
+    public void SetFuelReady(bool ready)    { FuelReady = ready; }
+    public void SetCateringReady(bool ready){ CateringReady = ready; }
+    public void SetBaggageReady(bool ready) { BaggageReady = ready; }
 
     // ── Interne ────────────────────────────────────────────────────────────
     private Sequence       _seq;
@@ -201,7 +205,7 @@ public class Aircraft : MonoBehaviour
 
         // Attend : timer de base ET les deux services si des camions ont été dépêchés.
         // FuelReady / CateringReady valent true par défaut (sans dépôt, pas de blocage).
-        while ((_gateTimer > 0f || !FuelReady || !CateringReady) && !_forceDeparture)
+        while ((_gateTimer > 0f || !FuelReady || !CateringReady || !BaggageReady) && !_forceDeparture)
         {
             _gateTimer -= Time.deltaTime;
             yield return null;

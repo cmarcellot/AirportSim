@@ -1113,6 +1113,76 @@ public static class AirportSceneSetup
             "Sauvegarde (Ctrl+S) puis Play.", "OK");
     }
 
+    // ── Setup 3C — Baggage Truck ──────────────────────────────────────────
+
+    [MenuItem("AirportSim/Setup 3C - Baggage Truck", true)]
+    public static bool Setup3CValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 3C - Baggage Truck")]
+    public static void Setup3C()
+    {
+        EnsureFolder("Assets/_Game/Prefabs", "Vehicles");
+
+        // ── Prefab BaggageTruck ───────────────────────────────────────────
+        const string baggagePath = "Assets/_Game/Prefabs/Vehicles/BaggageTruck.prefab";
+        var baggagePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(baggagePath);
+        if (baggagePrefab == null)
+        {
+            var baggageGo = Depot.BuildDefaultBaggageTruck();
+            baggageGo.AddComponent<BaggageTruck>();
+            baggagePrefab = PrefabUtility.SaveAsPrefabAsset(baggageGo, baggagePath);
+            GameObject.DestroyImmediate(baggageGo);
+        }
+
+        // ── Injecter dans le Depot existant de la scène ───────────────────
+        var depot = Object.FindAnyObjectByType<Depot>();
+        if (depot != null)
+        {
+            var depotSO = new SerializedObject(depot);
+            depotSO.FindProperty("baggageTruckPrefab").objectReferenceValue = baggagePrefab;
+            var maxBaggageProp = depotSO.FindProperty("maxBaggageTrucks");
+            if (maxBaggageProp != null && maxBaggageProp.intValue == 0)
+                maxBaggageProp.intValue = 2;
+            depotSO.ApplyModifiedProperties();
+            EditorUtility.SetDirty(depot);
+        }
+        else
+        {
+            Debug.LogWarning("[AirportSim] Aucun Depot dans la scène. Exécute d'abord Setup 3A.");
+        }
+
+        // ── Mettre à jour le prefab Depot ─────────────────────────────────
+        const string depotPrefabPath = "Assets/_Game/Prefabs/Vehicles/Depot.prefab";
+        var depotPrefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(depotPrefabPath);
+        if (depotPrefabAsset != null)
+        {
+            var depotComp = depotPrefabAsset.GetComponent<Depot>();
+            if (depotComp != null)
+            {
+                var pso = new SerializedObject(depotComp);
+                pso.FindProperty("baggageTruckPrefab").objectReferenceValue = baggagePrefab;
+                var maxBag = pso.FindProperty("maxBaggageTrucks");
+                if (maxBag != null && maxBag.intValue == 0) maxBag.intValue = 2;
+                pso.ApplyModifiedProperties();
+                EditorUtility.SetDirty(depotPrefabAsset);
+            }
+        }
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+
+        Debug.Log("[AirportSim] Setup 3C terminé — BaggageTruck.");
+        EditorUtility.DisplayDialog("AirportSim",
+            "Setup 3C terminé !\n\n" +
+            "• BaggageTruck prefab créé (châssis anthracite + hayon orange)\n" +
+            "• Injecté dans le Depot existant (2 camions bagages)\n\n" +
+            "Les trois trucks (Fuel · Catering · Baggage) partent en parallèle\n" +
+            "dès qu'un avion arrive à la gate.\n" +
+            "L'avion attend que les TROIS soient terminés pour repartir.\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.", "OK");
+    }
+
     private static void EnsureFolder(string parent, string name)
     {
         string path = parent + "/" + name;

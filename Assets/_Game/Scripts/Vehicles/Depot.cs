@@ -22,6 +22,9 @@ public class Depot : MonoBehaviour
     [SerializeField] private int maxCateringTrucks = 2;
 
     [FoldoutGroup("Depot Config")]
+    [SerializeField] private int maxBaggageTrucks = 2;
+
+    [FoldoutGroup("Depot Config")]
     [Tooltip("Prefab FuelTruck. Si vide, modèle généré par code.")]
     [FormerlySerializedAs("truckPrefab")]
     [SerializeField] private GameObject fuelTruckPrefab;
@@ -29,6 +32,10 @@ public class Depot : MonoBehaviour
     [FoldoutGroup("Depot Config")]
     [Tooltip("Prefab CateringTruck. Si vide, modèle généré par code.")]
     [SerializeField] private GameObject cateringTruckPrefab;
+
+    [FoldoutGroup("Depot Config")]
+    [Tooltip("Prefab BaggageTruck. Si vide, modèle généré par code.")]
+    [SerializeField] private GameObject baggageTruckPrefab;
 
     // ── État ───────────────────────────────────────────────────────────────
 
@@ -39,17 +46,25 @@ public class Depot : MonoBehaviour
     private int _cateringAvailable;
 
     [FoldoutGroup("Depot State"), ShowInInspector, ReadOnly]
+    private int _baggageAvailable;
+
+    [FoldoutGroup("Depot State"), ShowInInspector, ReadOnly]
     private int _fuelQueueCount;
 
     [FoldoutGroup("Depot State"), ShowInInspector, ReadOnly]
     private int _cateringQueueCount;
 
+    [FoldoutGroup("Depot State"), ShowInInspector, ReadOnly]
+    private int _baggageQueueCount;
+
     // ── Pools ──────────────────────────────────────────────────────────────
 
     private readonly List<FuelTruck>    _idleFuel     = new();
     private readonly List<CateringTruck>_idleCatering = new();
+    private readonly List<BaggageTruck> _idleBaggage  = new();
     private readonly Queue<Aircraft>    _fuelQueue    = new();
     private readonly Queue<Aircraft>    _cateringQueue= new();
+    private readonly Queue<Aircraft>    _baggageQueue = new();
 
     private FlightScheduler _scheduler;
     private TextMeshPro     _countLabel;
@@ -61,10 +76,13 @@ public class Depot : MonoBehaviour
         // Détruire tous les véhicules de la session précédente (sans Scene Reload).
         foreach (var v in FindObjectsByType<FuelTruck>())     Destroy(v.gameObject);
         foreach (var v in FindObjectsByType<CateringTruck>()) Destroy(v.gameObject);
+        foreach (var v in FindObjectsByType<BaggageTruck>())  Destroy(v.gameObject);
         _idleFuel.Clear();
         _idleCatering.Clear();
+        _idleBaggage.Clear();
         _fuelQueue.Clear();
         _cateringQueue.Clear();
+        _baggageQueue.Clear();
 
         // Anti-double-subscription : désabonner avant de ré-abonner.
         if (_scheduler != null) _scheduler.OnFlightStatusChanged -= OnFlightStatus;
@@ -78,6 +96,7 @@ public class Depot : MonoBehaviour
 
         for (int i = 0; i < maxFuelTrucks;    i++) SpawnFuelTruck(i);
         for (int i = 0; i < maxCateringTrucks; i++) SpawnCateringTruck(i);
+        for (int i = 0; i < maxBaggageTrucks;  i++) SpawnBaggageTruck(i);
 
         _scheduler = FindAnyObjectByType<FlightScheduler>();
         if (_scheduler != null)
@@ -107,6 +126,7 @@ public class Depot : MonoBehaviour
         {
             RequestFuelService(flight.Aircraft);
             RequestCateringService(flight.Aircraft);
+            RequestBaggageService(flight.Aircraft);
         }
     }
 
@@ -150,6 +170,25 @@ public class Depot : MonoBehaviour
         UpdateIndicator();
     }
 
+    public void RequestBaggageService(Aircraft aircraft)
+    {
+        if (aircraft == null || maxBaggageTrucks == 0) return;
+
+        aircraft.SetBaggageReady(false);
+
+        if (_idleBaggage.Count > 0)
+        {
+            var truck = _idleBaggage[0];
+            _idleBaggage.RemoveAt(0);
+            truck.DispatchToAircraft(aircraft);
+        }
+        else
+        {
+            _baggageQueue.Enqueue(aircraft);
+        }
+        UpdateIndicator();
+    }
+
     /// <summary>Position de parking selon le type et l'index dans le pool idle.</summary>
     public Vector3 ParkingSpot(GroundVehicle vehicle)
     {
@@ -159,11 +198,17 @@ public class Depot : MonoBehaviour
             int idx = _idleFuel.Count;
             return transform.position + new Vector3(-(idx + 1) * 5f, 0f, 0f);
         }
-        else
+        else if (vehicle is CateringTruck)
         {
             // Côté droit du dépôt (+X)
             int idx = _idleCatering.Count;
             return transform.position + new Vector3((idx + 1) * 5f, 0f, 0f);
+        }
+        else
+        {
+            // Derrière le dépôt (-Z)
+            int idx = _idleBaggage.Count;
+            return transform.position + new Vector3(0f, 0f, -(idx + 1) * 5f);
         }
     }
 
@@ -173,6 +218,8 @@ public class Depot : MonoBehaviour
             HandleFuelReturn(fuelTruck);
         else if (vehicle is CateringTruck cateringTruck)
             HandleCateringReturn(cateringTruck);
+        else if (vehicle is BaggageTruck baggageTruck)
+            HandleBaggageReturn(baggageTruck);
 
         UpdateIndicator();
     }
@@ -208,6 +255,22 @@ public class Depot : MonoBehaviour
             int parkIdx = _idleCatering.Count;
             _idleCatering.Add(truck);
             truck.transform.position = transform.position + new Vector3((parkIdx + 1) * 5f, 0f, 0f);
+        }
+    }
+
+    private void HandleBaggageReturn(BaggageTruck truck)
+    {
+        PurgeDeparted(_baggageQueue);
+
+        if (_baggageQueue.Count > 0)
+        {
+            truck.DispatchToAircraft(_baggageQueue.Dequeue());
+        }
+        else
+        {
+            int parkIdx = _idleBaggage.Count;
+            _idleBaggage.Add(truck);
+            truck.transform.position = transform.position + new Vector3(0f, 0f, -(parkIdx + 1) * 5f);
         }
     }
 
@@ -248,6 +311,20 @@ public class Depot : MonoBehaviour
         _idleCatering.Add(truck);
     }
 
+    private void SpawnBaggageTruck(int index)
+    {
+        GameObject go = baggageTruckPrefab != null
+            ? Instantiate(baggageTruckPrefab)
+            : BuildDefaultBaggageTruck();
+
+        go.name               = $"BaggageTruck_{index + 1}";
+        go.transform.position = transform.position + new Vector3(0f, 0f, -(index + 1) * 5f);
+
+        var truck = go.GetComponent<BaggageTruck>() ?? go.AddComponent<BaggageTruck>();
+        truck.Initialize(this);
+        _idleBaggage.Add(truck);
+    }
+
     // ── Modèles procéduraux ────────────────────────────────────────────────
 
     public static GameObject BuildDefaultFuelTruck()
@@ -275,6 +352,42 @@ public class Depot : MonoBehaviour
         tank.transform.localScale    = new Vector3(2.5f, 1f, 1.6f);
         tank.GetComponent<MeshRenderer>().sharedMaterial = redMat;
         UnityEngine.Object.DestroyImmediate(tank.GetComponent<BoxCollider>());
+
+        return root;
+    }
+
+    public static GameObject BuildDefaultBaggageTruck()
+    {
+        var darkGreyMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        darkGreyMat.color = new Color(0.25f, 0.25f, 0.28f); // anthracite
+
+        var orangeMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        orangeMat.color = new Color(0.95f, 0.45f, 0.05f); // orange vif
+
+        var root = new GameObject("BaggageTruckModel");
+
+        // Châssis gris foncé allongé
+        var chassis = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        chassis.name = "Chassis";
+        chassis.transform.SetParent(root.transform);
+        chassis.transform.localPosition = Vector3.zero;
+        chassis.transform.localScale    = new Vector3(4f, 1.2f, 2f);
+        chassis.GetComponent<MeshRenderer>().sharedMaterial = darkGreyMat;
+        UnityEngine.Object.DestroyImmediate(chassis.GetComponent<BoxCollider>());
+
+        // Pivot du hayon : bord droit (+X) du châssis, mi-hauteur
+        var pivotGo = new GameObject("TailgatePivot");
+        pivotGo.transform.SetParent(root.transform);
+        pivotGo.transform.localPosition = new Vector3(2.15f, -0.4f, 0f);
+
+        // Hayon orange : panel vertical, étendu vers le haut depuis le pivot
+        var tailgate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        tailgate.name = "Tailgate";
+        tailgate.transform.SetParent(pivotGo.transform);
+        tailgate.transform.localPosition = new Vector3(0.12f, 0.5f, 0f);
+        tailgate.transform.localScale    = new Vector3(0.25f, 1f, 1.7f);
+        tailgate.GetComponent<MeshRenderer>().sharedMaterial = orangeMat;
+        UnityEngine.Object.DestroyImmediate(tailgate.GetComponent<BoxCollider>());
 
         return root;
     }
@@ -335,8 +448,10 @@ public class Depot : MonoBehaviour
     {
         _fuelAvailable     = _idleFuel.Count;
         _cateringAvailable = _idleCatering.Count;
+        _baggageAvailable  = _idleBaggage.Count;
         _fuelQueueCount    = _fuelQueue.Count;
         _cateringQueueCount= _cateringQueue.Count;
+        _baggageQueueCount = _baggageQueue.Count;
 
         if (_countLabel == null) return;
 
@@ -348,6 +463,10 @@ public class Depot : MonoBehaviour
             ? $"Cat.: {_cateringAvailable} dispo"
             : $"Cat.: file {_cateringQueueCount}";
 
-        _countLabel.text = $"DEPOT\n{fuelLine}\n{cateringLine}";
+        string baggageLine = _baggageAvailable > 0
+            ? $"Bag.: {_baggageAvailable} dispo"
+            : $"Bag.: file {_baggageQueueCount}";
+
+        _countLabel.text = $"DEPOT\n{fuelLine}\n{cateringLine}\n{baggageLine}";
     }
 }
