@@ -739,6 +739,110 @@ public static class AirportSceneSetup
         Debug.Log("[AirportSim] EventSystem ajouté (InputSystemUIInputModule).");
     }
 
+    // ── Setup 3A — Fuel Truck ─────────────────────────────────────────────
+
+    [MenuItem("AirportSim/Setup 3A - Fuel Truck", true)]
+    public static bool Setup3AValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 3A - Fuel Truck")]
+    public static void Setup3A()
+    {
+        EnsureFolder("Assets/_Game/Prefabs",          "Vehicles");
+        EnsureFolder("Assets/_Game/ScriptableObjects/Buildings", "");
+
+        // ── Matériau dépôt ────────────────────────────────────────────────
+        var depotMat = CreateOpaqueMat("Assets/_Game/Materials/DepotMat.mat",
+                           new Color(0.60f, 0.55f, 0.20f));
+        AssetDatabase.SaveAssets();
+
+        // ── Prefab FuelTruck ──────────────────────────────────────────────
+        const string truckPath = "Assets/_Game/Prefabs/Vehicles/FuelTruck.prefab";
+        var truckPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(truckPath);
+        if (truckPrefab == null)
+        {
+            var truckGo = Depot.BuildDefaultTruck();
+            truckGo.AddComponent<FuelTruck>();
+            truckPrefab = PrefabUtility.SaveAsPrefabAsset(truckGo, truckPath);
+            GameObject.DestroyImmediate(truckGo);
+        }
+
+        // ── Prefab Depot ──────────────────────────────────────────────────
+        const string depotPrefabPath = "Assets/_Game/Prefabs/Vehicles/Depot.prefab";
+        var depotPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(depotPrefabPath);
+        if (depotPrefab == null)
+        {
+            var depotGo = new GameObject("Depot");
+
+            // Bâtiment (cube jaune-gris, 2x2 cells = 8x8 u)
+            var building = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            building.name = "DepotBuilding";
+            building.transform.SetParent(depotGo.transform);
+            building.transform.localPosition = Vector3.zero;
+            building.transform.localScale    = new Vector3(8f, 3f, 8f);
+            building.GetComponent<MeshRenderer>().sharedMaterial = depotMat;
+            Object.DestroyImmediate(building.GetComponent<BoxCollider>());
+
+            var depotComp = depotGo.AddComponent<Depot>();
+            // Injecter le préfab camion via SerializedObject
+            var depotCompSO = new SerializedObject(depotComp);
+            depotCompSO.FindProperty("truckPrefab").objectReferenceValue = truckPrefab;
+            depotCompSO.ApplyModifiedProperties();
+
+            depotPrefab = PrefabUtility.SaveAsPrefabAsset(depotGo, depotPrefabPath);
+            GameObject.DestroyImmediate(depotGo);
+        }
+
+        // ── BuildingData Depot ────────────────────────────────────────────
+        const string depotDataPath = "Assets/_Game/ScriptableObjects/Buildings/Depot.asset";
+        var depotSO = UpsertBuildingData(
+            depotDataPath, "Depot Carburant",
+            BuildingCategory.FuelStation, BuildingType.None,
+            20_000f, new Vector2Int(2, 2), 3f, depotPrefab,
+            new Color(0.95f, 0.80f, 0.10f));
+        AssetDatabase.SaveAssets();
+
+        // ── Ajouter au BuildMenuController ────────────────────────────────
+        var menu = Object.FindAnyObjectByType<BuildMenuController>();
+        if (menu != null)
+        {
+            var menuSO   = new SerializedObject(menu);
+            var listProp = menuSO.FindProperty("availableBuildings");
+            int n        = listProp.arraySize;
+            // Vérifier qu'il n'est pas déjà dans la liste
+            bool alreadyIn = false;
+            for (int i = 0; i < n; i++)
+                if (listProp.GetArrayElementAtIndex(i).objectReferenceValue == depotSO)
+                { alreadyIn = true; break; }
+            if (!alreadyIn)
+            {
+                listProp.arraySize = n + 1;
+                listProp.GetArrayElementAtIndex(n).objectReferenceValue = depotSO;
+                menuSO.ApplyModifiedProperties();
+            }
+        }
+
+        // ── Pré-placer un Depot dans la scène ─────────────────────────────
+        if (Object.FindAnyObjectByType<Depot>() == null)
+        {
+            // Position à droite des gates (côté Apron)
+            var depotInstance = (GameObject)PrefabUtility.InstantiatePrefab(depotPrefab);
+            depotInstance.transform.position = new Vector3(60f, 0f, 14f);
+        }
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        AssetDatabase.Refresh();
+
+        Debug.Log("[AirportSim] Setup 3A terminé — Depot + FuelTruck.");
+        EditorUtility.DisplayDialog("AirportSim",
+            "Setup 3A terminé !\n\n" +
+            "• FuelTruck prefab créé (cube jaune + citerne rouge)\n" +
+            "• Depot prefab créé (2×2 cellules, 20 000 $)\n" +
+            "• Depot pré-placé à côté des gates\n" +
+            "• Ajouté au menu Construction (onglet Bâtiments)\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.\n" +
+            "Le fuel truck sortira automatiquement à chaque atterrissage.", "OK");
+    }
+
     // ── Setup 2E — Flight Planning & FlightBoard ──────────────────────────
 
     [MenuItem("AirportSim/Setup 2E - Flight Planning", true)]

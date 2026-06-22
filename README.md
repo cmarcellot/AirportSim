@@ -113,6 +113,13 @@ Assets/
 - **FlightScheduler** : détecte les pistes via ZoneSystem, fait apparaître un avion toutes les 2 min de jeu (respecte `SpeedMultiplier`), `[Button] Spawn Test Aircraft`
 - **Prefab Boeing 737** : corps + ailes + dérive (cubes blancs)
 
+### Étape 3A — Véhicule au sol : Fuel Truck ✅ `v0.12.0`
+- **GroundVehicle** : classe de base — vitesse configurable, suivi de chemin `List<Vector3>` via `PathfindingSystem.FindAirsidePath`, rotation fluide DOTween dans les virages, états `Idle / MovingToAircraft / Servicing / Returning`
+- **FuelTruck** (hérite de GroundVehicle) : durée de service 2 min (temps de jeu), déclenché automatiquement quand `FlightStatus.AtGate`, barre de progression WorldSpace Canvas en face de la caméra, retour au dépôt après service
+- **Depot** : bâtiment 2×2 cellules — 20 000 $, pool de 3 camions, file d'attente si tous occupés, indicateur flottant (camions disponibles / file)
+- **Prefab FuelTruck** : corps jaune + citerne rouge (procédural)
+- **Setup 3A** : menu `AirportSim → Setup 3A - Fuel Truck` — crée prefabs, BuildingData, pré-place un dépôt, ajoute au menu Construction
+
 ### Étape 2E — Planning basique des vols ✅ `v0.11.0`
 - **FlightData** (ScriptableObject) : numéro, compagnie, couleur, AircraftData, heure d'arrivée/départ
 - **FlightScheduler** réécrit : liste de vols planifiés (Odin), génération auto si liste vide, file d'attente si piste/gate indisponible, polling état avions, événements UI
@@ -156,8 +163,10 @@ Assets/
 8. Menu **AirportSim → Setup 2B - Flight System**
 9. Menu **AirportSim → Setup 2C - Gates and Taxi**
 9. Menu **AirportSim → Setup 2A-bis - Airport Environment**
-10. Sauvegarder (`Ctrl+S`)
-11. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
+10. Menu **AirportSim → Setup 2E - Flight Planning**
+11. Menu **AirportSim → Setup 3A - Fuel Truck**
+12. Sauvegarder (`Ctrl+S`)
+13. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
 ## Contrôles
 
