@@ -14,7 +14,8 @@ public class FuelTruck : GroundVehicle
     [SerializeField] private float serviceDurationMinutes = 2f;
 
     private GameObject _barRoot;
-    private Image      _barFill;
+    private Transform  _barFill;       // scale.x : 0 = vide  →  1 = plein
+    private float      _fillMaxWidth;  // largeur naturelle de la barre en unités rect
     private Coroutine  _serviceCo;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -49,12 +50,13 @@ public class FuelTruck : GroundVehicle
     private IEnumerator ServiceCoroutine()
     {
         State = VehicleState.Servicing;
-        float total = serviceDurationMinutes * 60f;
-        float timer = total;
-        SetBarVisible(true);
-        if (_barFill != null) _barFill.fillAmount = 0f;
+        float total   = serviceDurationMinutes * 60f; // secondes de jeu
+        float elapsed = 0f;
 
-        while (timer > 0f)
+        SetBarProgress(0f);
+        SetBarVisible(true);
+
+        while (elapsed < total)
         {
             if (AssignedAircraft == null) // avion parti pendant le service
             {
@@ -62,20 +64,26 @@ public class FuelTruck : GroundVehicle
                 ReturnToDepot();
                 yield break;
             }
-            timer -= Time.deltaTime;
-            if (_barFill != null)
-                _barFill.fillAmount = 1f - (timer / total);
+
+            elapsed += Time.deltaTime;
+            SetBarProgress(Mathf.Clamp01(elapsed / total));
             yield return null;
         }
 
+        SetBarProgress(1f);
         SetBarVisible(false);
         ReturnToDepot();
     }
 
     // ── Barre de progression ───────────────────────────────────────────────
+    // Approche : localScale.x (pivot gauche) — fiable sans sprite dans WorldSpace.
 
     private void BuildProgressBar()
     {
+        const float barW = 120f;
+        const float barH = 18f;
+        const float pad  = 3f;
+
         _barRoot = new GameObject("FuelProgressBar");
         _barRoot.transform.SetParent(transform);
         _barRoot.transform.localPosition = new Vector3(0f, 4f, 0f);
@@ -85,32 +93,40 @@ public class FuelTruck : GroundVehicle
         canvas.renderMode = RenderMode.WorldSpace;
 
         var rt       = _barRoot.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(120f, 18f);
+        rt.sizeDelta = new Vector2(barW, barH);
 
         // Fond sombre
-        var bgGo         = new GameObject("BG");
+        var bgGo     = new GameObject("BG");
         bgGo.transform.SetParent(_barRoot.transform, false);
-        var bgRect       = bgGo.AddComponent<RectTransform>();
+        var bgRect   = bgGo.AddComponent<RectTransform>();
         bgRect.anchorMin = Vector2.zero;
         bgRect.anchorMax = Vector2.one;
         bgRect.offsetMin = bgRect.offsetMax = Vector2.zero;
-        bgGo.AddComponent<Image>().color = new Color(0.08f, 0.08f, 0.08f, 0.88f);
+        bgGo.AddComponent<Image>().color = new Color(0.08f, 0.08f, 0.08f, 0.90f);
 
-        // Remplissage (vert)
-        var fillGo         = new GameObject("Fill");
+        // Remplissage — ancré à gauche, pivot gauche → localScale.x pilote la largeur
+        _fillMaxWidth = barW - pad * 2f; // 114 unités
+        var fillGo  = new GameObject("Fill");
         fillGo.transform.SetParent(bgGo.transform, false);
-        var fillRect       = fillGo.AddComponent<RectTransform>();
-        fillRect.anchorMin = Vector2.zero;
-        fillRect.anchorMax = Vector2.one;
-        fillRect.offsetMin = new Vector2(3f, 3f);
-        fillRect.offsetMax = new Vector2(-3f, -3f);
-        _barFill             = fillGo.AddComponent<Image>();
-        _barFill.color       = new Color(0.15f, 0.80f, 0.25f);
-        _barFill.type        = Image.Type.Filled;
-        _barFill.fillMethod  = Image.FillMethod.Horizontal;
-        _barFill.fillAmount  = 0f;
+        var fillRect = fillGo.AddComponent<RectTransform>();
+        fillRect.anchorMin        = Vector2.zero;
+        fillRect.anchorMax        = new Vector2(0f, 1f); // ancré sur le bord gauche
+        fillRect.pivot            = new Vector2(0f, 0.5f); // pivot gauche → croît à droite
+        fillRect.anchoredPosition = new Vector2(pad, 0f);
+        fillRect.sizeDelta        = new Vector2(_fillMaxWidth, -(pad * 2f));
+        fillGo.AddComponent<Image>().color = new Color(0.15f, 0.80f, 0.25f);
+
+        _barFill = fillGo.transform;
+        // Initialiser à 0 : scale.x=0 → barre invisible
+        _barFill.localScale = new Vector3(0f, 1f, 1f);
 
         _barRoot.SetActive(false);
+    }
+
+    private void SetBarProgress(float t)
+    {
+        if (_barFill != null)
+            _barFill.localScale = new Vector3(Mathf.Clamp01(t), 1f, 1f);
     }
 
     private void SetBarVisible(bool show)
