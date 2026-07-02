@@ -32,6 +32,35 @@ public class PassengerSpawner : MonoBehaviour
     [FoldoutGroup("État"), ShowInInspector, ReadOnly]
     private int CheckInCellCount => _checkInCells?.Count ?? 0;
 
+    [FoldoutGroup("État"), ShowInInspector, ReadOnly]
+    private float AverageSatisfaction
+    {
+        get
+        {
+            float sum = 0f;
+            int   n   = 0;
+            foreach (var list in _flightPassengers.Values)
+                foreach (var p in list)
+                    if (p != null) { sum += p.Satisfaction; n++; }
+            return n == 0 ? 100f : Mathf.Round(sum / n * 10f) / 10f;
+        }
+    }
+
+    [FoldoutGroup("État"), ShowInInspector, ReadOnly]
+    private float AverageWaitTime
+    {
+        get
+        {
+            float sum = 0f;
+            int   n   = 0;
+            foreach (var list in _flightPassengers.Values)
+                foreach (var p in list)
+                    if (p != null && p.State == PassengerState.WaitingCheckin)
+                    { sum += p.WaitTime; n++; }
+            return n == 0 ? 0f : Mathf.Round(sum / n * 10f) / 10f;
+        }
+    }
+
     // ── Interne ──────────────────────────────────────────────────────────────
 
     private FlightScheduler   _scheduler;
