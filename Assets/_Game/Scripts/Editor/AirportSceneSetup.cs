@@ -1265,7 +1265,7 @@ public static class AirportSceneSetup
     [MenuItem("AirportSim/Setup 3D - Jetways")]
     public static void Setup3D()
     {
-        var gates = Object.FindObjectsByType<Gate>(FindObjectsSortMode.None);
+        var gates = Object.FindObjectsByType<Gate>();
         if (gates.Length == 0)
         {
             EditorUtility.DisplayDialog("AirportSim",
