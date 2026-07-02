@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using DG.Tweening;
 using Sirenix.OdinInspector;
 using UnityEngine;
@@ -11,8 +12,11 @@ public enum PassengerState
 }
 
 /// <summary>
-/// Passager individuel. Reçoit une destination personnelle (avec jitter) depuis PassengerSpawner.
-/// Mouvement : DOTween DOMove en 2 étapes — entrée route → terminal → zone check-in.
+/// Passager individuel.
+/// Mouvement :
+///   1. Ligne droite route → terminalEntry
+///   2. Chemin A* landside (si disponible) → destination finale
+///      ou ligne droite → finalDest si aucun chemin
 /// </summary>
 public class Passenger : MonoBehaviour
 {
@@ -49,10 +53,7 @@ public class Passenger : MonoBehaviour
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
-    private void Awake()
-    {
-        BuildVisual();
-    }
+    private void Awake() => BuildVisual();
 
     private void OnDestroy()
     {
@@ -65,7 +66,6 @@ public class Passenger : MonoBehaviour
         bool waiting = State == PassengerState.WaitingCheckin  ||
                        State == PassengerState.WaitingSecurity ||
                        State == PassengerState.WaitingGate;
-
         if (!waiting) return;
 
         WaitTime += Time.deltaTime;
@@ -76,38 +76,52 @@ public class Passenger : MonoBehaviour
     // ── API ─────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Démarre le passager.
-    /// terminalEntry  : point d'entrée du terminal (fin de la marche extérieure).
-    /// finalDest      : destination finale intérieure (check-in), avec jitter appliqué par le spawner.
+    /// landsidePath : chemin A* de terminalEntry vers la destination (peut être vide).
+    /// finalDest    : destination exacte (cellule aléatoire + jitter sub-cellule).
     /// </summary>
-    public void Initialize(ActiveFlight flight, Vector3 terminalEntry, Vector3 finalDest)
+    public void Initialize(ActiveFlight flight, Vector3 terminalEntry,
+                           List<Vector3> landsidePath, Vector3 finalDest)
     {
         AssignedFlight = flight;
         SetColor(flight?.AirlineColor ?? Color.white);
-        State = PassengerState.Arriving;
-        _moveCo = StartCoroutine(MovementCoroutine(terminalEntry, finalDest));
+        State   = PassengerState.Arriving;
+        _moveCo = StartCoroutine(MovementCoroutine(terminalEntry, landsidePath, finalDest));
     }
 
     // ── Mouvement ────────────────────────────────────────────────────────────
 
-    private IEnumerator MovementCoroutine(Vector3 terminalEntry, Vector3 finalDest)
+    private IEnumerator MovementCoroutine(Vector3 terminalEntry,
+                                          List<Vector3> landsidePath,
+                                          Vector3 finalDest)
     {
-        // Étape 1 — marche depuis le spawn vers l'entrée du terminal
+        // Étape 1 — marche extérieure : spawn → entrée terminal
         yield return StartCoroutine(WalkTo(Flat(terminalEntry)));
 
-        // Étape 2 — marche vers la zone check-in (destination personnelle)
-        yield return StartCoroutine(WalkTo(Flat(finalDest)));
+        // Étape 2 — intérieur terminal
+        if (landsidePath != null && landsidePath.Count >= 2)
+        {
+            // Suit le chemin A* (skip waypoint 0 : on est déjà à/près du point de départ)
+            for (int i = 1; i < landsidePath.Count; i++)
+                yield return StartCoroutine(WalkTo(Flat(landsidePath[i])));
+
+            // Dernière étape : jitter sub-cellule vers la destination exacte
+            yield return StartCoroutine(WalkTo(Flat(finalDest)));
+        }
+        else
+        {
+            // Pas de chemin landside → ligne droite vers la destination
+            yield return StartCoroutine(WalkTo(Flat(finalDest)));
+        }
 
         State    = PassengerState.WaitingCheckin;
         WaitTime = 0f;
     }
 
-    /// <summary>Déplacement DOTween vers un point (Y=0). Rotation d'abord, ensuite translation.</summary>
+    /// <summary>Rotation DOTween puis translation DOMove vers la cible (Y=0 forcé).</summary>
     private IEnumerator WalkTo(Vector3 target)
     {
         Vector3 origin = Flat(transform.position);
         float   dist   = Vector3.Distance(origin, target);
-
         if (dist < 0.1f) yield break;
 
         var dir = (target - origin).normalized;
@@ -115,8 +129,8 @@ public class Passenger : MonoBehaviour
         // Rotation vers la cible
         if (dir.sqrMagnitude > 0.001f)
         {
-            var targetRot = Quaternion.LookRotation(dir, Vector3.up);
-            float angle   = Quaternion.Angle(transform.rotation, targetRot);
+            var   targetRot = Quaternion.LookRotation(dir, Vector3.up);
+            float angle     = Quaternion.Angle(transform.rotation, targetRot);
             if (angle > 3f)
             {
                 yield return transform
@@ -127,7 +141,7 @@ public class Passenger : MonoBehaviour
             }
         }
 
-        // Translation
+        // Déplacement
         yield return transform
             .DOMove(target, dist / MoveSpeed)
             .SetEase(Ease.Linear)
@@ -159,8 +173,6 @@ public class Passenger : MonoBehaviour
         mat.color = color;
         _bodyRenderer.sharedMaterial = mat;
     }
-
-    // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static Vector3 Flat(Vector3 v) => new Vector3(v.x, 0f, v.z);
 }
