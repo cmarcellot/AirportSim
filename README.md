@@ -113,6 +113,14 @@ Assets/
 - **FlightScheduler** : détecte les pistes via ZoneSystem, fait apparaître un avion toutes les 2 min de jeu (respecte `SpeedMultiplier`), `[Button] Spawn Test Aircraft`
 - **Prefab Boeing 737** : corps + ailes + dérive (cubes blancs)
 
+### Étape 3D — Passerelles d'embarquement (Jetways) ✅ `v0.15.0`
+- **Jetway.cs** : composant rattaché à chaque Gate — états `Retracted / Extending / Docked / Retracting`
+- **Animation DOTween** : rotation du pivot vers l'avion (0.4 s) puis extension fluide du bras (tube gris acier, tête de connexion blanche) via `DOVirtual.Float` sur la longueur locale en +Z
+- **Coordination Gate** : `Gate.AssignAircraft()` → `Jetway.Extend(aircraft)` ; `Gate.ReleaseAircraft()` → `Jetway.Retract()` — découplage total, la Gate n'a qu'une référence optionnelle
+- **Rétrocompatible** : `_jetway` est nul si aucun composant Jetway sur la Gate → aucune régression
+- **Setup 3D** : menu `AirportSim → Setup 3D - Jetways` — ajoute un composant Jetway à chacune des 5 gates existantes
+- **Odin Inspector** : `[ShowInInspector]` état et longueur du bras, `[Button]` « Test Extend » / « Test Retract »
+
 ### Étape 3C — Véhicule au sol : Bagagiste (Baggage Truck) ✅ `v0.14.0`
 - **BaggageTruck** (hérite de GroundVehicle) : durée de service 4 min (temps de jeu), se gare à l'arrière de l'avion (opposé au nez, position calculée via `-aircraft.transform.forward`)
 - **Animation hayon** : cube orange pivoté par DOTween (-90° autour de Z) à l'arrivée — s'ouvre comme une rampe de chargement ; se referme avant le retour au dépôt
@@ -185,8 +193,9 @@ Assets/
 11. Menu **AirportSim → Setup 3A - Fuel Truck**
 12. Menu **AirportSim → Setup 3B - Catering Truck**
 13. Menu **AirportSim → Setup 3C - Baggage Truck**
-14. Sauvegarder (`Ctrl+S`)
-15. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
+14. Menu **AirportSim → Setup 3D - Jetways**
+15. Sauvegarder (`Ctrl+S`)
+16. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
 ## Contrôles
 

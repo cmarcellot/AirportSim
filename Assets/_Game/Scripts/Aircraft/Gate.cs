@@ -16,6 +16,7 @@ public class Gate : MonoBehaviour
     // ── Interne ────────────────────────────────────────────────────────────
     private Material  _indicatorMat;
     private Transform _indicatorT;
+    private Jetway    _jetway;
 
     private static readonly Color ColorAvailable = new(0f,  0.75f, 0f,   1f);
     private static readonly Color ColorOccupied  = new(0.8f, 0f,  0f,   1f);
@@ -25,6 +26,7 @@ public class Gate : MonoBehaviour
 
     private void Awake()
     {
+        _jetway = GetComponent<Jetway>();
         // Guard : BuildIndicator ne s'exécute qu'une fois (idem sans Scene Reload).
         if (_indicatorT == null)
             BuildIndicator();
@@ -65,10 +67,12 @@ public class Gate : MonoBehaviour
         AssignedAircraft = aircraft;
         State            = GateState.Occupied;
         UpdateIndicator();
+        _jetway?.Extend(aircraft);
     }
 
     public void ReleaseAircraft()
     {
+        _jetway?.Retract();
         AssignedAircraft = null;
         State            = GateState.Available;
         UpdateIndicator();

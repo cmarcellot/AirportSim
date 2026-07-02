@@ -1257,6 +1257,43 @@ public static class AirportSceneSetup
         return 1;
     }
 
+    // ── Setup 3D — Jetways ────────────────────────────────────────────────
+
+    [MenuItem("AirportSim/Setup 3D - Jetways", true)]
+    public static bool Setup3DValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 3D - Jetways")]
+    public static void Setup3D()
+    {
+        var gates = Object.FindObjectsByType<Gate>(FindObjectsSortMode.None);
+        if (gates.Length == 0)
+        {
+            EditorUtility.DisplayDialog("AirportSim",
+                "Aucune gate trouvée.\nExécute d'abord Setup 2C - Gates and Taxi.", "OK");
+            return;
+        }
+
+        int added   = 0;
+        int skipped = 0;
+
+        foreach (var gate in gates)
+        {
+            if (gate.GetComponent<Jetway>() != null) { skipped++; continue; }
+            gate.gameObject.AddComponent<Jetway>();
+            added++;
+        }
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        Debug.Log($"[AirportSim] Setup 3D terminé — {added} jetway(s) ajouté(s).");
+        EditorUtility.DisplayDialog("AirportSim",
+            $"Setup 3D terminé !\n\n" +
+            $"• {added} passerelle(s) ajoutée(s) aux gates\n" +
+            (skipped > 0 ? $"• {skipped} gate(s) déjà équipée(s)\n" : "") +
+            "\nChaque passerelle s'étend quand un avion arrive\n" +
+            "et se rétracte automatiquement au départ.\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.", "OK");
+    }
+
     private static void EnsureFolder(string parent, string name)
     {
         string path = parent + "/" + name;
