@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using DG.Tweening;
 using Sirenix.OdinInspector;
 using UnityEngine;
 
@@ -47,6 +48,10 @@ public class PassengerSpawner : MonoBehaviour
 
     private void OnEnable()
     {
+        // Capacité DOTween : 1 tween par passager × plusieurs vols simultanés + autres systèmes
+        // 150 pax × 3 vols = 450, +100 marge pour véhicules/gates/caméra → 600
+        DOTween.SetTweensCapacity(tweenersCapacity: 600, sequencesCapacity: 50);
+
         foreach (var p in FindObjectsByType<Passenger>())
             Destroy(p.gameObject);
 

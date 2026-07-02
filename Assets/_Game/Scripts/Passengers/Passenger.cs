@@ -117,31 +117,20 @@ public class Passenger : MonoBehaviour
         WaitTime = 0f;
     }
 
-    /// <summary>Rotation DOTween puis translation DOMove vers la cible (Y=0 forcé).</summary>
+    /// <summary>Translation DOMove vers la cible (Y=0 forcé). Rotation instantanée.</summary>
     private IEnumerator WalkTo(Vector3 target)
     {
         Vector3 origin = Flat(transform.position);
         float   dist   = Vector3.Distance(origin, target);
         if (dist < 0.1f) yield break;
 
+        // Rotation instantanée : 1 passager = cube 0.3u, le tween n'est pas perceptible
+        // et économise 150+ tweens DOTween simultanés (un par passager par waypoint)
         var dir = (target - origin).normalized;
-
-        // Rotation vers la cible
         if (dir.sqrMagnitude > 0.001f)
-        {
-            var   targetRot = Quaternion.LookRotation(dir, Vector3.up);
-            float angle     = Quaternion.Angle(transform.rotation, targetRot);
-            if (angle > 3f)
-            {
-                yield return transform
-                    .DORotateQuaternion(targetRot, Mathf.Clamp(angle / 360f, 0.05f, 0.25f))
-                    .SetEase(Ease.OutSine)
-                    .SetLink(gameObject)
-                    .WaitForCompletion();
-            }
-        }
+            transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
 
-        // Déplacement
+        // Un seul tween actif par passager : le déplacement
         yield return transform
             .DOMove(target, dist / MoveSpeed)
             .SetEase(Ease.Linear)
