@@ -22,7 +22,7 @@ public class Jetway : MonoBehaviour
     [SerializeField] private float armElevation    = 3.5f;  // hauteur de la passerelle
 
     [FoldoutGroup("Jetway Config")]
-    [SerializeField] private float armBaseOffset   = 3f;    // recul vers le terminal (-Z)
+    [SerializeField] private float terminalOffset  = 12f;   // distance gate→mur terminal (gate Z=20, mur Z=8 → 12)
 
     // ── État ────────────────────────────────────────────────────────────────
 
@@ -92,7 +92,7 @@ public class Jetway : MonoBehaviour
         Vector3 dir = targetPos - wrapperPos;
         if (dir.sqrMagnitude < 0.01f) dir = transform.forward;
 
-        float      targetLen = Mathf.Clamp(dir.magnitude + 1.5f, 3f, 12f);
+        float      targetLen = Mathf.Clamp(dir.magnitude + 1.5f, 3f, 20f);
         Quaternion targetRot = Quaternion.LookRotation(dir.normalized, Vector3.up);
 
         // 1. Rotation vers l'avion → 2. Extension du bras
@@ -144,12 +144,18 @@ public class Jetway : MonoBehaviour
 
     private void CacheOrBuildVisuals()
     {
-        if (_wrapper != null) return;
+        if (_wrapper != null)
+        {
+            // Re-applique la position au cas où terminalOffset a changé
+            _wrapper.localPosition = new Vector3(0f, armElevation, -terminalOffset);
+            return;
+        }
 
         // Récupère les enfants existants si la scène persiste (Scene Reload désactivé)
         _wrapper = transform.Find("JetwayWrapper");
         if (_wrapper != null)
         {
+            _wrapper.localPosition = new Vector3(0f, armElevation, -terminalOffset);
             _arm  = _wrapper.Find("JetwayArm");
             _head = _wrapper.Find("JetwayHead");
             return;
@@ -162,11 +168,11 @@ public class Jetway : MonoBehaviour
     {
         var shader = Shader.Find("Universal Render Pipeline/Lit");
 
-        // Wrapper : élevé et légèrement décalé vers le terminal
+        // Wrapper ancré sur le mur nord du terminal (-terminalOffset de la gate)
         var wrapperGo = new GameObject("JetwayWrapper");
         _wrapper = wrapperGo.transform;
         _wrapper.SetParent(transform);
-        _wrapper.localPosition = new Vector3(0f, armElevation, -armBaseOffset);
+        _wrapper.localPosition = new Vector3(0f, armElevation, -terminalOffset);
         _wrapper.localRotation = Quaternion.identity;
 
         // Bras (tube gris acier, s'étend en +Z local)
