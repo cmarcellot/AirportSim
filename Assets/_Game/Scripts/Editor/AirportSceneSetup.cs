@@ -886,15 +886,15 @@ public static class AirportSceneSetup
         foreach (var g in Object.FindObjectsByType<Gate>())
             Object.DestroyImmediate(g.gameObject);
 
-        // 5 gates au bord sud de l'Apron (Z≈14, X espacés de 20 u)
-        // Apron world : X [-60, 60], Z [8, 88] → on place à Z=14 (Y cell 67)
+        // 5 gates dans l'Apron (Z [8, 88]).
+        // Z=20 : mur nord du terminal à Z=8, ailes du 737 = ±9 u → marge de 3 u.
         var positions = new Vector3[]
         {
-            new(-40f, 0f, 14f),
-            new(-20f, 0f, 14f),
-            new(  0f, 0f, 14f),
-            new( 20f, 0f, 14f),
-            new( 40f, 0f, 14f),
+            new(-40f, 0f, 20f),
+            new(-20f, 0f, 20f),
+            new(  0f, 0f, 20f),
+            new( 20f, 0f, 20f),
+            new( 40f, 0f, 20f),
         };
 
         for (int i = 0; i < positions.Length; i++)
@@ -1255,6 +1255,38 @@ public static class AirportSceneSetup
         so.ApplyModifiedProperties();
         EditorUtility.SetDirty(prefab);
         return 1;
+    }
+
+    // ── Fix — Positions des gates (anti-clipping terminal) ───────────────
+
+    [MenuItem("AirportSim/Fix Gate Positions", true)]
+    public static bool FixGatePositionsValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Fix Gate Positions")]
+    public static void FixGatePositions()
+    {
+        // Déplace les gates de l'ancien Z=14 vers Z=20 (clearance 3 u avec le mur terminal).
+        // Préserve tous les composants (Gate, Jetway, etc.).
+        int moved = 0;
+        foreach (var gate in Object.FindObjectsByType<Gate>())
+        {
+            var pos = gate.transform.position;
+            if (Mathf.Abs(pos.z - 14f) < 0.5f)
+            {
+                gate.transform.position = new Vector3(pos.x, pos.y, 20f);
+                EditorUtility.SetDirty(gate.gameObject);
+                moved++;
+            }
+        }
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        Debug.Log($"[AirportSim] Fix Gate Positions : {moved} gate(s) déplacée(s) Z=14 → Z=20.");
+        EditorUtility.DisplayDialog("AirportSim",
+            $"Fix Gate Positions terminé !\n\n" +
+            $"• {moved} gate(s) déplacée(s) de Z=14 → Z=20\n\n" +
+            "Les ailes du 737 (±9 u) ne dépassent plus dans le terminal.\n" +
+            "Tous les composants (Gate, Jetway…) sont préservés.\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.", "OK");
     }
 
     // ── Setup 3D — Jetways ────────────────────────────────────────────────
