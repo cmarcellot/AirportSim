@@ -1341,8 +1341,17 @@ public static class AirportSceneSetup
             return;
         }
 
-        var go = new GameObject("Passenger Spawner");
-        go.AddComponent<PassengerSpawner>();
+        var go      = new GameObject("Passenger Spawner");
+        var spawner = go.AddComponent<PassengerSpawner>();
+
+        // Injecter les positions explicitement via SerializedObject pour garantir
+        // les valeurs correctes indépendamment des initialiseurs C# sérialisés.
+        // Layout AirportEnvironment : RoadAccess bord sud Z=-144, terminal Z=-112, check-in Z=-90.
+        var so = new SerializedObject(spawner);
+        so.FindProperty("spawnPosition").vector3Value   = new Vector3(0f, 0f, -144f);
+        so.FindProperty("terminalEntry").vector3Value   = new Vector3(0f, 0f, -112f);
+        so.FindProperty("checkInPosition").vector3Value = new Vector3(0f, 0f, -90f);
+        so.ApplyModifiedProperties();
 
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
         Debug.Log("[AirportSim] Setup 4A terminé — PassengerSpawner ajouté.");

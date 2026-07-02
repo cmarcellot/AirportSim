@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Generic;
 using DG.Tweening;
 using Sirenix.OdinInspector;
 using UnityEngine;
@@ -12,7 +11,8 @@ public enum PassengerState
 }
 
 /// <summary>
-/// Passager individuel. Reçoit son vol et son chemin depuis PassengerSpawner.
+/// Passager individuel. Reçoit une destination personnelle (avec jitter) depuis PassengerSpawner.
+/// Mouvement : DOTween DOMove en 2 étapes — entrée route → terminal → zone check-in.
 /// </summary>
 public class Passenger : MonoBehaviour
 {
@@ -39,8 +39,8 @@ public class Passenger : MonoBehaviour
     // ── Config ──────────────────────────────────────────────────────────────
 
     private const float MoveSpeed              = 2f;
-    private const float SatisfactionDecayDelay = 60f;   // secondes avant perte de satisfaction
-    private const float SatisfactionDecayRate  = 3f;    // points / seconde
+    private const float SatisfactionDecayDelay = 60f;
+    private const float SatisfactionDecayRate  = 3f;
 
     // ── Interne ─────────────────────────────────────────────────────────────
 
@@ -77,94 +77,65 @@ public class Passenger : MonoBehaviour
 
     /// <summary>
     /// Démarre le passager.
-    /// terminalEntry : seuil d'entrée du terminal (fin du trajet à pied en dehors).
-    /// landsidePath  : chemin pré-calculé à l'intérieur du terminal (peut être vide).
+    /// terminalEntry  : point d'entrée du terminal (fin de la marche extérieure).
+    /// finalDest      : destination finale intérieure (check-in), avec jitter appliqué par le spawner.
     /// </summary>
-    public void Initialize(ActiveFlight flight, Vector3 terminalEntry, List<Vector3> landsidePath)
+    public void Initialize(ActiveFlight flight, Vector3 terminalEntry, Vector3 finalDest)
     {
         AssignedFlight = flight;
-
-        if (_bodyRenderer != null)
-        {
-            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            mat.color = flight?.AirlineColor ?? Color.white;
-            _bodyRenderer.sharedMaterial = mat;
-        }
-
-        State   = PassengerState.Arriving;
-        _moveCo = StartCoroutine(MovementCoroutine(terminalEntry, landsidePath));
+        SetColor(flight?.AirlineColor ?? Color.white);
+        State = PassengerState.Arriving;
+        _moveCo = StartCoroutine(MovementCoroutine(terminalEntry, finalDest));
     }
 
-    // ── Déplacement ──────────────────────────────────────────────────────────
+    // ── Mouvement ────────────────────────────────────────────────────────────
 
-    private IEnumerator MovementCoroutine(Vector3 terminalEntry, List<Vector3> landsidePath)
+    private IEnumerator MovementCoroutine(Vector3 terminalEntry, Vector3 finalDest)
     {
-        // Phase 1 : ligne droite depuis le spawn jusqu'à l'entrée du terminal
-        yield return StartCoroutine(WalkStraightTo(terminalEntry));
+        // Étape 1 — marche depuis le spawn vers l'entrée du terminal
+        yield return StartCoroutine(WalkTo(Flat(terminalEntry)));
 
-        // Phase 2 : chemin landside à l'intérieur du terminal
-        if (landsidePath != null && landsidePath.Count > 0)
-            yield return StartCoroutine(FollowPath(landsidePath));
+        // Étape 2 — marche vers la zone check-in (destination personnelle)
+        yield return StartCoroutine(WalkTo(Flat(finalDest)));
 
-        // Arrivé au check-in
         State    = PassengerState.WaitingCheckin;
         WaitTime = 0f;
     }
 
-    private IEnumerator WalkStraightTo(Vector3 target)
+    /// <summary>Déplacement DOTween vers un point (Y=0). Rotation d'abord, ensuite translation.</summary>
+    private IEnumerator WalkTo(Vector3 target)
     {
-        target.y = 0f;
-        var flat = new Vector3(transform.position.x, 0f, transform.position.z);
+        Vector3 origin = Flat(transform.position);
+        float   dist   = Vector3.Distance(origin, target);
 
-        while (Vector3.Distance(flat, target) > 0.25f)
+        if (dist < 0.1f) yield break;
+
+        var dir = (target - origin).normalized;
+
+        // Rotation vers la cible
+        if (dir.sqrMagnitude > 0.001f)
         {
-            flat = new Vector3(transform.position.x, 0f, transform.position.z);
-            var dir = (target - flat).normalized;
-
-            // Rotation fluide
-            if (dir.sqrMagnitude > 0.001f)
-            {
-                var targetRot = Quaternion.LookRotation(dir, Vector3.up);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * 8f);
-            }
-
-            transform.position += new Vector3(dir.x, 0f, dir.z) * MoveSpeed * Time.deltaTime;
-            yield return null;
-        }
-        transform.position = target;
-    }
-
-    private IEnumerator FollowPath(List<Vector3> path)
-    {
-        foreach (var waypoint in path)
-        {
-            var target = new Vector3(waypoint.x, 0f, waypoint.z);
-            var delta  = target - new Vector3(transform.position.x, 0f, transform.position.z);
-
-            if (delta.sqrMagnitude < 0.04f) continue;
-
-            // Rotation DOTween vers le waypoint
-            var targetRot = Quaternion.LookRotation(delta.normalized, Vector3.up);
+            var targetRot = Quaternion.LookRotation(dir, Vector3.up);
             float angle   = Quaternion.Angle(transform.rotation, targetRot);
-            if (angle > 5f)
+            if (angle > 3f)
             {
-                float rotDur = Mathf.Clamp(angle / 180f, 0.05f, 0.25f);
-                yield return transform.DORotateQuaternion(targetRot, rotDur)
-                                      .SetEase(Ease.InOutSine)
-                                      .SetLink(gameObject)
-                                      .WaitForCompletion();
+                yield return transform
+                    .DORotateQuaternion(targetRot, Mathf.Clamp(angle / 360f, 0.05f, 0.25f))
+                    .SetEase(Ease.OutSine)
+                    .SetLink(gameObject)
+                    .WaitForCompletion();
             }
-
-            float dist = Vector3.Distance(new Vector3(transform.position.x, 0f, transform.position.z), target);
-            if (dist > 0.1f)
-                yield return transform.DOMove(target, dist / MoveSpeed)
-                                      .SetEase(Ease.Linear)
-                                      .SetLink(gameObject)
-                                      .WaitForCompletion();
         }
+
+        // Translation
+        yield return transform
+            .DOMove(target, dist / MoveSpeed)
+            .SetEase(Ease.Linear)
+            .SetLink(gameObject)
+            .WaitForCompletion();
     }
 
-    // ── Prefab procédural ────────────────────────────────────────────────────
+    // ── Visuel ───────────────────────────────────────────────────────────────
 
     private void BuildVisual()
     {
@@ -173,11 +144,23 @@ public class Passenger : MonoBehaviour
         body.transform.SetParent(transform);
         body.transform.localPosition = new Vector3(0f, 0.3f, 0f);
         body.transform.localScale    = new Vector3(0.3f, 0.6f, 0.3f);
-        UnityEngine.Object.DestroyImmediate(body.GetComponent<BoxCollider>());
+        DestroyImmediate(body.GetComponent<BoxCollider>());
 
         _bodyRenderer = body.GetComponent<MeshRenderer>();
         var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
         mat.color = Color.white;
         _bodyRenderer.sharedMaterial = mat;
     }
+
+    private void SetColor(Color color)
+    {
+        if (_bodyRenderer == null) return;
+        var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        mat.color = color;
+        _bodyRenderer.sharedMaterial = mat;
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static Vector3 Flat(Vector3 v) => new Vector3(v.x, 0f, v.z);
 }
