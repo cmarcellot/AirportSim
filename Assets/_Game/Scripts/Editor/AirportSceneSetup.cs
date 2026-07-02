@@ -1326,6 +1326,35 @@ public static class AirportSceneSetup
             "Sauvegarde (Ctrl+S) puis Play.", "OK");
     }
 
+    // ── Setup 4A — Passagers ─────────────────────────────────────────────────
+
+    [MenuItem("AirportSim/Setup 4A - Passengers", true)]
+    public static bool Setup4AValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 4A - Passengers")]
+    public static void Setup4A()
+    {
+        if (Object.FindAnyObjectByType<PassengerSpawner>() != null)
+        {
+            EditorUtility.DisplayDialog("AirportSim",
+                "Un PassengerSpawner existe déjà dans la scène.", "OK");
+            return;
+        }
+
+        var go = new GameObject("Passenger Spawner");
+        go.AddComponent<PassengerSpawner>();
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        Debug.Log("[AirportSim] Setup 4A terminé — PassengerSpawner ajouté.");
+        EditorUtility.DisplayDialog("AirportSim",
+            "Setup 4A terminé !\n\n" +
+            "• PassengerSpawner ajouté à la scène\n\n" +
+            "Dès qu'un avion arrive à la gate (AtGate), des passagers\n" +
+            "apparaissent à l'entrée de la route et marchent vers le terminal.\n" +
+            "La satisfaction diminue si l'attente dépasse 60 s.\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.", "OK");
+    }
+
     private static void EnsureFolder(string parent, string name)
     {
         string path = parent + "/" + name;

@@ -113,6 +113,16 @@ Assets/
 - **FlightScheduler** : détecte les pistes via ZoneSystem, fait apparaître un avion toutes les 2 min de jeu (respecte `SpeedMultiplier`), `[Button] Spawn Test Aircraft`
 - **Prefab Boeing 737** : corps + ailes + dérive (cubes blancs)
 
+### Étape 4A — Passagers : spawn et pathfinding landside ✅ `v0.16.0`
+- **Passenger.cs** : cube coloré 0.3×0.6×0.3 u (couleur = compagnie aérienne), états `Arriving → WaitingCheckin → CheckingIn → WaitingSecurity → PassingSecurity → WaitingGate → Boarding → Boarded`
+- **Déplacement en 2 phases** : ligne droite depuis l'entrée de la route jusqu'à l'entrée du terminal (Z=-112), puis chemin A* landside `FindLandsidePath()` jusqu'à la zone check-in — vitesse 2 u/s, rotation fluide DOTween dans les virages
+- **Satisfaction** : démarre à 80/100, décroît de 3 pts/s si l'attente en `WaitingCheckin` dépasse 60 s
+- **PassengerSpawner.cs** : abonné à `FlightScheduler.OnFlightStatusChanged` — déclenche le spawn dès `FlightStatus.AtGate`, compte = `passengerCapacity × taux aléatoire [60 %-95 %]`, progression sur ~100 s réelles avec décalage latéral aléatoire
+- **Chemin landside partagé** : calculé une seule fois par le Spawner et transmis à chaque passager (évite N appels A* simultanés)
+- **Nettoyage vol** : les passagers sont détruits à `Departing` (embarquement terminé)
+- **Odin Inspector** : état, satisfaction, vol assigné visibles sur chaque Passenger ; bouton « Rebuild Landside Path » sur le Spawner
+- **Setup 4A** : menu `AirportSim → Setup 4A - Passengers` — ajoute `PassengerSpawner` à la scène
+
 ### Étape 3D — Passerelles d'embarquement (Jetways) ✅ `v0.15.0`
 - **Jetway.cs** : composant rattaché à chaque Gate — états `Retracted / Extending / Docked / Retracting`
 - **Animation DOTween** : rotation du pivot vers l'avion (0.4 s) puis extension fluide du bras (tube gris acier, tête de connexion blanche) via `DOVirtual.Float` sur la longueur locale en +Z
@@ -194,8 +204,9 @@ Assets/
 12. Menu **AirportSim → Setup 3B - Catering Truck**
 13. Menu **AirportSim → Setup 3C - Baggage Truck**
 14. Menu **AirportSim → Setup 3D - Jetways**
-15. Sauvegarder (`Ctrl+S`)
-16. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
+15. Menu **AirportSim → Setup 4A - Passengers**
+16. Sauvegarder (`Ctrl+S`)
+17. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
 ## Contrôles
 
