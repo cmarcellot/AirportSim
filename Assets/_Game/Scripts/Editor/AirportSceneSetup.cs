@@ -1364,6 +1364,53 @@ public static class AirportSceneSetup
             "Sauvegarde (Ctrl+S) puis Play.", "OK");
     }
 
+    // ── Setup 4C — Contrôle sécurité ─────────────────────────────────────────
+
+    [MenuItem("AirportSim/Setup 4C - Security Control", true)]
+    public static bool Setup4CValidate() => !Application.isPlaying;
+
+    [MenuItem("AirportSim/Setup 4C - Security Control")]
+    public static void Setup4C()
+    {
+        if (Object.FindAnyObjectByType<SecurityArea>() != null)
+        {
+            EditorUtility.DisplayDialog("AirportSim",
+                "Une SecurityArea existe déjà dans la scène.", "OK");
+            return;
+        }
+
+        // ── SecurityArea ──────────────────────────────────────────────────
+        var areaGo  = new GameObject("Security Area");
+        var area    = areaGo.AddComponent<SecurityArea>();
+        var areaSO  = new SerializedObject(area);
+        areaSO.FindProperty("restrictedLineCenter").vector3Value = new Vector3(0f, 0f, -55f);
+        areaSO.FindProperty("restrictedLineWidth").floatValue    = 80f;
+        areaSO.ApplyModifiedProperties();
+
+        // ── 2 postes de contrôle ──────────────────────────────────────────
+        // Positionnés à Z=-65, de part et d'autre de l'axe central
+        // Face nord (+Z) : les passagers arrivent du sud (check-in ~Z=-90)
+        var cp1Go = new GameObject("SecurityCheckpoint_1");
+        cp1Go.transform.position = new Vector3(-8f, 0f, -65f);
+        cp1Go.AddComponent<SecurityCheckpoint>();
+
+        var cp2Go = new GameObject("SecurityCheckpoint_2");
+        cp2Go.transform.position = new Vector3(8f, 0f, -65f);
+        cp2Go.AddComponent<SecurityCheckpoint>();
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        Debug.Log("[AirportSim] Setup 4C terminé — SecurityArea + 2 checkpoints.");
+        EditorUtility.DisplayDialog("AirportSim",
+            "Setup 4C terminé !\n\n" +
+            "• SecurityArea ajoutée (ligne rouge au sol à Z=-55)\n" +
+            "• 2 postes de contrôle à Z=-65 (±8 sur X)\n\n" +
+            "Flux passager : check-in → file au poste → contrôle 10 s (jeu)\n" +
+            "  • 5 % de chance d'alarme → +15 s + satisfaction -20\n" +
+            "  • Satisfaction : -3 pts/min pendant l'attente à la sécurité\n\n" +
+            "Inspector : Force Open · Trigger Alarm disponibles sur chaque poste.\n\n" +
+            "Sauvegarde (Ctrl+S) puis Play.", "OK");
+    }
+
     private static void EnsureFolder(string parent, string name)
     {
         string path = parent + "/" + name;

@@ -13,10 +13,8 @@ public enum PassengerState
 
 /// <summary>
 /// Passager individuel.
-/// Mouvement :
-///   1. Ligne droite route → terminalEntry
-///   2. Chemin A* landside (si disponible) → destination finale
-///      ou ligne droite → finalDest si aucun chemin
+/// Flux : spawn → terminalEntry → checkIn → sécurité → WaitingGate.
+/// La satisfaction décroît pendant l'attente au check-in (après 60 s) et à la sécurité (3 pts/min).
 /// </summary>
 public class Passenger : MonoBehaviour
 {
@@ -43,13 +41,15 @@ public class Passenger : MonoBehaviour
     // ── Config ──────────────────────────────────────────────────────────────
 
     private const float MoveSpeed              = 2f;
-    private const float SatisfactionDecayDelay = 60f;
-    private const float SatisfactionDecayRate  = 3f;
+    private const float SatisfactionDecayDelay = 60f;  // secondes avant décroissance au check-in
+    private const float SatisfactionDecayRate  = 3f;   // pts/s après délai au check-in
+    private const float SecurityDecayRate      = 3f / 60f; // pts/s à la sécurité (3/min)
 
     // ── Interne ─────────────────────────────────────────────────────────────
 
     private Coroutine    _moveCo;
     private MeshRenderer _bodyRenderer;
+    private bool         _securityCleared;
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -63,11 +63,9 @@ public class Passenger : MonoBehaviour
 
     private void Update()
     {
-        bool waiting = State == PassengerState.WaitingCheckin  ||
-                       State == PassengerState.WaitingSecurity ||
-                       State == PassengerState.WaitingGate;
-        if (!waiting) return;
-
+        // Décroissance satisfaction pendant l'attente au check-in uniquement.
+        // La sécurité est gérée directement dans NavigateToSecurity.
+        if (State != PassengerState.WaitingCheckin) return;
         WaitTime += Time.deltaTime;
         if (WaitTime > SatisfactionDecayDelay)
             Satisfaction = Mathf.Max(0f, Satisfaction - SatisfactionDecayRate * Time.deltaTime);
@@ -75,10 +73,6 @@ public class Passenger : MonoBehaviour
 
     // ── API ─────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// landsidePath : chemin A* de terminalEntry vers la destination (peut être vide).
-    /// finalDest    : destination exacte (cellule aléatoire + jitter sub-cellule).
-    /// </summary>
     public void Initialize(ActiveFlight flight, Vector3 terminalEntry,
                            List<Vector3> landsidePath, Vector3 finalDest)
     {
@@ -86,6 +80,28 @@ public class Passenger : MonoBehaviour
         SetColor(flight?.AirlineColor ?? Color.white);
         State   = PassengerState.Arriving;
         _moveCo = StartCoroutine(MovementCoroutine(terminalEntry, landsidePath, finalDest));
+    }
+
+    // Appelé par SecurityCheckpoint quand c'est le tour de ce passager
+    public void BeginSecurityProcessing() => State = PassengerState.PassingSecurity;
+
+    // Appelé par SecurityCheckpoint en cas d'alarme (5 %)
+    public void TriggerAlarm()
+    {
+        Satisfaction = Mathf.Max(0f, Satisfaction - 20f);
+        // Animation de recul
+        transform.DOPunchPosition(-transform.forward * 1.5f, 0.8f, 1, 0f)
+                 .SetLink(gameObject);
+    }
+
+    // Appelé par SecurityCheckpoint quand le contrôle est terminé
+    public void CompleteSecurityProcessing() => _securityCleared = true;
+
+    // Appelé par SecurityCheckpoint pour repositionner visuellement dans la file
+    public void MoveToQueuePosition(Vector3 pos)
+    {
+        DOTween.Kill(transform);
+        transform.DOMove(pos, 0.5f).SetEase(Ease.OutQuad).SetLink(gameObject);
     }
 
     // ── Mouvement ────────────────────────────────────────────────────────────
@@ -97,40 +113,62 @@ public class Passenger : MonoBehaviour
         // Étape 1 — marche extérieure : spawn → entrée terminal
         yield return StartCoroutine(WalkTo(Flat(terminalEntry)));
 
-        // Étape 2 — intérieur terminal
+        // Étape 2 — intérieur terminal → zone check-in
         if (landsidePath != null && landsidePath.Count >= 2)
         {
-            // Suit le chemin A* (skip waypoint 0 : on est déjà à/près du point de départ)
             for (int i = 1; i < landsidePath.Count; i++)
                 yield return StartCoroutine(WalkTo(Flat(landsidePath[i])));
-
-            // Dernière étape : jitter sub-cellule vers la destination exacte
             yield return StartCoroutine(WalkTo(Flat(finalDest)));
         }
         else
         {
-            // Pas de chemin landside → ligne droite vers la destination
             yield return StartCoroutine(WalkTo(Flat(finalDest)));
         }
 
         State    = PassengerState.WaitingCheckin;
         WaitTime = 0f;
+
+        // Étape 3 — sécurité (si SecurityArea présente dans la scène)
+        yield return StartCoroutine(NavigateToSecurity());
     }
 
-    /// <summary>Translation DOMove vers la cible (Y=0 forcé). Rotation instantanée.</summary>
+    private IEnumerator NavigateToSecurity()
+    {
+        var secArea = SecurityArea.Instance;
+        if (secArea == null) { State = PassengerState.WaitingGate; yield break; }
+
+        var checkpoint = secArea.GetLeastBusyCheckpoint();
+        if (checkpoint == null) { State = PassengerState.WaitingGate; yield break; }
+
+        // Marche vers le poste de contrôle
+        yield return StartCoroutine(WalkTo(Flat(checkpoint.transform.position)));
+
+        // Mise en file
+        _securityCleared = false;
+        checkpoint.Enqueue(this);
+        State = PassengerState.WaitingSecurity;
+
+        // Attente du feu vert + décroissance satisfaction 3 pts/min
+        while (!_securityCleared)
+        {
+            Satisfaction = Mathf.Max(0f, Satisfaction - SecurityDecayRate * Time.deltaTime);
+            yield return null;
+        }
+
+        State = PassengerState.WaitingGate;
+    }
+
     private IEnumerator WalkTo(Vector3 target)
     {
         Vector3 origin = Flat(transform.position);
         float   dist   = Vector3.Distance(origin, target);
         if (dist < 0.1f) yield break;
 
-        // Rotation instantanée : 1 passager = cube 0.3u, le tween n'est pas perceptible
-        // et économise 150+ tweens DOTween simultanés (un par passager par waypoint)
+        // Rotation instantanée (économise ~150 tweens DOTween simultanés)
         var dir = (target - origin).normalized;
         if (dir.sqrMagnitude > 0.001f)
             transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
 
-        // Un seul tween actif par passager : le déplacement
         yield return transform
             .DOMove(target, dist / MoveSpeed)
             .SetEase(Ease.Linear)

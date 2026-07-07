@@ -113,6 +113,13 @@ Assets/
 - **FlightScheduler** : détecte les pistes via ZoneSystem, fait apparaître un avion toutes les 2 min de jeu (respecte `SpeedMultiplier`), `[Button] Spawn Test Aircraft`
 - **Prefab Boeing 737** : corps + ailes + dérive (cubes blancs)
 
+### Étape 4C — Contrôle sécurité ✅ `v0.17.0`
+- **SecurityCheckpoint.cs** : états `Closed / Open / Processing` — traite 1 passager à la fois ; durée de contrôle 10 s (temps de jeu) ; 5 % de chance d'alarme (+15 s, satisfaction -20, animation de recul DOPunchPosition) ; file d'attente visible dans l'Odin Inspector ; repositionnement visuel des passagers en file
+- **SecurityArea.cs** : singleton — gère tous les postes dans la scène ; méthode `GetLeastBusyCheckpoint()` pour distribution équitable ; ligne rouge au sol (cube procédural 80 u × 0.3 u) marquant la zone restreinte
+- **Passenger.cs étendu** : flux `WaitingCheckin → NavigateToSecurity → WaitingSecurity → PassingSecurity → WaitingGate` ; satisfaction -3 pts/min pendant l'attente à la sécurité ; si aucune SecurityArea, passe directement à `WaitingGate`
+- **Odin Inspector** : `FoldoutGroup("Security Info")` sur checkpoint — file d'attente, passager en cours, boutons `Force Open` et `Trigger Alarm`
+- **Setup 4C** : menu `AirportSim → Setup 4C - Security Control` — crée `SecurityArea` (ligne rouge Z=-55) + 2 postes à Z=-65
+
 ### Étape 4A — Passagers : spawn et pathfinding landside ✅ `v0.16.0`
 - **Passenger.cs** : cube coloré 0.3×0.6×0.3 u (couleur = compagnie aérienne), états `Arriving → WaitingCheckin → CheckingIn → WaitingSecurity → PassingSecurity → WaitingGate → Boarding → Boarded`
 - **Déplacement en 2 phases** : ligne droite depuis l'entrée de la route jusqu'à l'entrée du terminal (Z=-112), puis chemin A* landside `FindLandsidePath()` jusqu'à la zone check-in — vitesse 2 u/s, rotation fluide DOTween dans les virages
@@ -205,8 +212,9 @@ Assets/
 13. Menu **AirportSim → Setup 3C - Baggage Truck**
 14. Menu **AirportSim → Setup 3D - Jetways**
 15. Menu **AirportSim → Setup 4A - Passengers**
-16. Sauvegarder (`Ctrl+S`)
-17. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
+16. Menu **AirportSim → Setup 4C - Security Control**
+17. Sauvegarder (`Ctrl+S`)
+18. Ouvrir `Assets/_Game/Scenes/Airport.unity` et appuyer sur **Play**
 
 ## Contrôles
 
